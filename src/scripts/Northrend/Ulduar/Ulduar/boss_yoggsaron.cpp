@@ -293,9 +293,10 @@ enum Misc
     DATA_GET_KEEPERS_COUNT              = 1,
     DATA_GET_CURRENT_ILLUSION           = 2,
     DATA_GET_SARA_PHASE                 = 3,
+    DATA_GET_DRIVE_ME_CRAZY             = 4,
 };
 
-const Position Middle = {1980.28f, -25.5868f, 329.397f};
+const Position Middle = {1980.28f, -25.5868f, 329.397f, M_PI*1.5f};
 
 
 class boss_yoggsaron_sara : public CreatureScript
@@ -484,7 +485,7 @@ public:
                 if (!summon || summon->GetEntry() != NPC_OMINOUS_CLOUD || me->GetDistance(summon) < 20)
                     continue;
 
-                if ((!cloud || urand(0,1) && !summon->HasAura(SPELL_SUMMON_GUARDIAN_OF_YS)))
+                if ((!cloud || (urand(0,1) && !summon->HasAura(SPELL_SUMMON_GUARDIAN_OF_YS))))
                     cloud = summon;
             }
 
@@ -525,7 +526,7 @@ public:
             for (uint8 i = 0; i < RAID_MODE(4, 10); ++i)
             {
                 float ang = i ? (M_PI*2.0f/i) : M_PI*2.0f;
-                if (cr = me->SummonCreature(NPC_DESCEND_INTO_MADNESS, me->GetPositionX()+25*cos(ang), me->GetPositionY()+25*sin(ang), 326, 0, TEMPSUMMON_TIMED_DESPAWN, 15000))
+                if ((cr = me->SummonCreature(NPC_DESCEND_INTO_MADNESS, me->GetPositionX()+25*cos(ang), me->GetPositionY()+25*sin(ang), 326, 0, TEMPSUMMON_TIMED_DESPAWN, 15000)))
                 {
                     cr->SetFlag(UNIT_FIELD_FLAGS, UNIT_FLAG_DISABLE_MOVE | UNIT_FLAG_NON_ATTACKABLE);
                     cr->SetArmor(_currentIllusion);
@@ -1098,7 +1099,7 @@ public:
                 me->LowerPlayerDamageReq(me->GetMaxHealth()*0.7f);
 
                 me->RemoveAura(SPELL_SHADOW_BARRIER);
-                
+
                 events.ScheduleEvent(EVENT_YS_LUNATIC_GAZE, 7000);
                 events.ScheduleEvent(EVENT_YS_SHADOW_BEACON, 20000);
                 events.ScheduleEvent(EVENT_YS_SUMMON_GUARDIAN, 0);
@@ -1126,7 +1127,7 @@ public:
 
         uint32 GetData(uint32 param) const
         {
-            if (param == ACTION_FAILED_DRIVE_ME_CRAZY)
+            if (param == DATA_GET_DRIVE_ME_CRAZY)
                 return !_usedInsane;
 
             return 0;
@@ -2874,7 +2875,7 @@ class achievement_yogg_saron_drive_me_crazy : public AchievementCriteriaScript
 
         bool OnCheck(Player* player, Unit* target)
         {
-            return target && target->GetAI()->GetData(ACTION_FAILED_DRIVE_ME_CRAZY); // target = Yogg-Saron
+            return target && target->GetAI()->GetData(DATA_GET_DRIVE_ME_CRAZY); // target = Yogg-Saron
         }
 };
 

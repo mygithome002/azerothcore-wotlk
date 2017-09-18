@@ -232,7 +232,7 @@ public:
 
         void EnterCombat(Unit* pWho)
         {
-            if (summons.size() != RAID_MODE(8, 16))
+            if (summons.size() != uint32(RAID_MODE(8, 16)))
             {
                 EnterEvadeMode();
                 return;
@@ -470,8 +470,8 @@ public:
             if( faction )
                 for( uint8 k=0; k<4; ++k )
                 {
-                    if( faction == 'A' && ( k>1 || k==1 && RAID_MODE(1,0) ) ||
-                        faction == 'H' && ( k<2 || k==3 && RAID_MODE(1,0) ) )
+                    if( (faction == 'A' && ( k>1 || (k==1 && RAID_MODE(1,0)) )) ||
+                        (faction == 'H' && ( k<2 || (k==3 && RAID_MODE(1,0)) )) )
                         continue;
 
                     for( uint8 i=0; i<4; ++i )
@@ -636,10 +636,10 @@ public:
             if (timer <= diff)
             {
                 timer = 2500;
-                if (me->IsSummon())
+                if (me->IsSummon()) {
                     if (Unit* s = me->ToTempSummon()->GetSummoner())
                     {
-                        if (s->GetTypeId() == TYPEID_PLAYER && !s->HasAura(SPELL_FLASH_FREEZE_TRAPPED_PLAYER) || s->GetTypeId() == TYPEID_UNIT && !s->HasAura(SPELL_FLASH_FREEZE_TRAPPED_NPC))
+                        if ((s->GetTypeId() == TYPEID_PLAYER && !s->HasAura(SPELL_FLASH_FREEZE_TRAPPED_PLAYER)) || (s->GetTypeId() == TYPEID_UNIT && !s->HasAura(SPELL_FLASH_FREEZE_TRAPPED_NPC)))
                             me->DespawnOrUnsummon(2000);
                         else if (s->GetTypeId() == TYPEID_PLAYER)
                             if (InstanceScript* pInstance = me->GetInstanceScript())
@@ -650,7 +650,10 @@ public:
                                 }
                     }
                     else
+                    {
                         me->DespawnOrUnsummon(2000);
+                    }
+                }
             }
             else
                 timer -= diff;
@@ -1286,7 +1289,7 @@ public:
 
         void HandleEffectPeriodic(AuraEffect const * aurEff)
         {
-            if (aurEff->GetTickNumber() == aurEff->GetTotalTicks()-1)
+            if (aurEff->GetTotalTicks() > 0 && aurEff->GetTickNumber() == uint32(aurEff->GetTotalTicks())-1)
             {
                 Unit* target = GetTarget();
                 Unit* caster = GetCaster();
