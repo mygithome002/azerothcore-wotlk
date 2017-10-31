@@ -141,9 +141,11 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
             break;
 		case CLASS_DEATH_KNIGHT:
 			if (tab == 0)
-				engine->addStrategies("tank", "tank aoe", NULL);
+				engine->addStrategies("blood", NULL);
+			else if (tab == 1)
+				engine->addStrategies("frost", "frost aoe", "dps assist", "threat", NULL);
 			else
-				engine->addStrategies("dps", "dps assist", "threat", NULL);
+				engine->addStrategies("unholy", "unholy aoe", "dps assist", "threat", NULL);
 			break;
         case CLASS_SHAMAN:
 			if ((tab == 0) && (player->getLevel() > 9))
@@ -283,11 +285,11 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
 	if (player->InBattleground())
 	{
 		nonCombatEngine->addStrategies("grind", "warsong", "nc", "food", "chat",
-+			"default", "quest", "gather", "duel", "emote", "lfg", "bg", "conserve mana", NULL);
++			"default", "quest", "loot", "gather", "duel", "emote", "lfg", "bg", "conserve mana", NULL);
 	}
 	else {
 		nonCombatEngine->addStrategies("nc", "food", "stay", "chat",
-+			"default", "quest", "gather", "duel", "emote", "follow", "lfg", "bg", "conserve mana", NULL);
++			"default", "quest", "loot", "gather", "duel", "emote", "follow", "lfg", "bg", "conserve mana", NULL);
 	}
 
     if (sRandomPlayerbotMgr.IsRandomBot(player))
