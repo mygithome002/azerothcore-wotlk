@@ -83,10 +83,6 @@ void PlayerbotFactory::Prepare()
 	bot->CombatStop(true);
 	bot->GiveLevel(level);
 
-	//thesawolf - refill hp/sp since level resets can leave a vacuum
-	bot->SetHealth(bot->GetMaxHealth());
-	bot->SetPower(POWER_MANA, bot->GetMaxPower(POWER_MANA));
-
 	if (!sPlayerbotAIConfig.randomBotShowHelmet)
 	{
 		bot->SetFlag(PLAYER_FLAGS, PLAYER_FLAGS_HIDE_HELM);
@@ -106,20 +102,14 @@ void PlayerbotFactory::Randomize(bool incremental)
 	CancelAuras();
 	bot->SaveToDB(false, true);
 
-	if (sPlayerbotAIConfig.randomBotInitQuest)
-	{
-		sLog->outBasic("Initializing quests...");
-		InitQuests();
-	}
+	/*sLog->outBasic("Initializing quests...");
+	InitQuests();
 	// quest rewards boost bot level, so reduce back
     bot->SetLevel(level);
-	//thesawolf - refill hp/sp since level resets can leave a vacuum
-	bot->SetHealth(bot->GetMaxHealth());
-	bot->SetPower(POWER_MANA, bot->GetMaxPower(POWER_MANA));
     ClearInventory();
     bot->SetUInt32Value(PLAYER_XP, 0);
     CancelAuras();
-    bot->SaveToDB(false, true);
+    bot->SaveToDB(false, true);*/
 
 	sLog->outBasic("Initializing skills...");
 	InitSkills();
@@ -165,9 +155,8 @@ void PlayerbotFactory::Randomize(bool incremental)
 	InitGlyphs();
 
 	sLog->outBasic("Initializing guilds...");
-	bot->SaveToDB(false, true); //thesawolf - save save save (hopefully avoids dupes)
-	InitGuild(); //thesawolf - duplicate guild leaders causing segfault CHECK
-	
+	InitGuild();
+
 	sLog->outBasic("Initializing pet...");
 	InitPet();
 
@@ -1064,21 +1053,6 @@ void PlayerbotFactory::InitSkills()
 {
 	uint32 maxValue = level * 5;
 	SetRandomSkill(SKILL_DEFENSE);
-	SetRandomSkill(SKILL_SWORDS);
-	SetRandomSkill(SKILL_AXES);
-	SetRandomSkill(SKILL_BOWS);
-	SetRandomSkill(SKILL_GUNS);
-	SetRandomSkill(SKILL_MACES);
-	SetRandomSkill(SKILL_2H_SWORDS);
-	SetRandomSkill(SKILL_STAVES);
-	SetRandomSkill(SKILL_2H_MACES);
-	SetRandomSkill(SKILL_2H_AXES);
-	SetRandomSkill(SKILL_DAGGERS);
-	SetRandomSkill(SKILL_THROWN);
-	SetRandomSkill(SKILL_CROSSBOWS);
-	SetRandomSkill(SKILL_WANDS);
-	SetRandomSkill(SKILL_POLEARMS);
-	SetRandomSkill(SKILL_FIST_WEAPONS);
 
 	if (bot->getLevel() >= 70)
 		bot->SetSkill(SKILL_RIDING, 0, 300, 300);
@@ -1095,13 +1069,100 @@ void PlayerbotFactory::InitSkills()
 	switch (bot->getClass())
 	{
 	case CLASS_DEATH_KNIGHT:
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_AXES);
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_2H_SWORDS);
+		SetRandomSkill(SKILL_2H_MACES);
+		SetRandomSkill(SKILL_2H_AXES);
+		SetRandomSkill(SKILL_POLEARMS);
+		break;
+	case CLASS_DRUID:
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_2H_MACES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_POLEARMS);
+		SetRandomSkill(SKILL_FIST_WEAPONS);
+		break;
 	case CLASS_WARRIOR:
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_AXES);
+		SetRandomSkill(SKILL_BOWS);
+		SetRandomSkill(SKILL_GUNS);
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_2H_SWORDS);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_2H_MACES);
+		SetRandomSkill(SKILL_2H_AXES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_CROSSBOWS);
+		SetRandomSkill(SKILL_POLEARMS);
+		SetRandomSkill(SKILL_FIST_WEAPONS);
+		SetRandomSkill(SKILL_THROWN);
+		break;
 	case CLASS_PALADIN:
 		bot->SetSkill(SKILL_PLATE_MAIL, 0, skillLevel, skillLevel);
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_AXES);
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_2H_SWORDS);
+		SetRandomSkill(SKILL_2H_MACES);
+		SetRandomSkill(SKILL_2H_AXES);
+		SetRandomSkill(SKILL_POLEARMS);
+		break;
+	case CLASS_PRIEST:
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_WANDS);
 		break;
 	case CLASS_SHAMAN:
+		SetRandomSkill(SKILL_AXES);
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_2H_MACES);
+		SetRandomSkill(SKILL_2H_AXES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_FIST_WEAPONS);
+		break;
+	case CLASS_MAGE:
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_WANDS);
+		break;
+	case CLASS_WARLOCK:
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_WANDS);
+		break;
 	case CLASS_HUNTER:
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_AXES);
+		SetRandomSkill(SKILL_BOWS);
+		SetRandomSkill(SKILL_GUNS);
+		SetRandomSkill(SKILL_2H_SWORDS);
+		SetRandomSkill(SKILL_STAVES);
+		SetRandomSkill(SKILL_2H_AXES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_CROSSBOWS);
+		SetRandomSkill(SKILL_POLEARMS);
+		SetRandomSkill(SKILL_FIST_WEAPONS);
+		SetRandomSkill(SKILL_THROWN);
 		bot->SetSkill(SKILL_MAIL, 0, skillLevel, skillLevel);
+		break;
+	case CLASS_ROGUE:
+		SetRandomSkill(SKILL_SWORDS);
+		SetRandomSkill(SKILL_AXES);
+		SetRandomSkill(SKILL_BOWS);
+		SetRandomSkill(SKILL_GUNS);
+		SetRandomSkill(SKILL_MACES);
+		SetRandomSkill(SKILL_DAGGERS);
+		SetRandomSkill(SKILL_CROSSBOWS);
+		SetRandomSkill(SKILL_FIST_WEAPONS);
+		SetRandomSkill(SKILL_THROWN);
 	}
 }
 
@@ -2304,7 +2365,6 @@ void PlayerbotFactory::InitGlyphs()
 
 void PlayerbotFactory::InitGuild()
 {
-	bot->SaveToDB(false, true); //thesawolf - save save save
 	if (bot->GetGuildId())
 		return;
 
@@ -2333,5 +2393,4 @@ void PlayerbotFactory::InitGuild()
 
 	if (guild->GetMemberCount() < 10)
 		guild->AddMember(bot->GetGUID(), urand(GR_OFFICER, GR_INITIATE));
-	bot->SaveToDB(false, true); //thesawolf - save save save
 }

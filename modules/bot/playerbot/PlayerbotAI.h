@@ -118,6 +118,8 @@ public:
     void DoNextAction();
     void DoSpecificAction(string name);
     void ChangeStrategy(string name, BotState type);
+	void ClearStrategies(BotState type);
+	list<string> GetStrategies(BotState type);
     bool ContainsStrategy(StrategyType type);
     bool HasStrategy(string name, BotState type);
     void ResetStrategies();
@@ -139,9 +141,6 @@ public:
     void RemoveShapeshift();
     void WaitForSpellCast(Spell *spell);
     bool PlaySound(uint32 emote);
-
-	//thesawolf - emote reactions
-	void ReceiveEmote(Player* player, uint32 emote);
 
     virtual bool CanCastSpell(string name, Unit* target);
     virtual bool CastSpell(string name, Unit* target);
@@ -180,7 +179,7 @@ protected:
     Engine* engines[BOT_STATE_MAX];
     BotState currentState;
     ChatHelper chatHelper;
-    stack<ChatCommandHolder> chatCommands;
+	queue<ChatCommandHolder> chatCommands;
     PacketHandlingHelper botOutgoingPacketHandlers;
     PacketHandlingHelper masterIncomingPacketHandlers;
     PacketHandlingHelper masterOutgoingPacketHandlers;
