@@ -46,7 +46,6 @@ void AddSC_list_commandscript();
 void AddSC_lookup_commandscript();
 void AddSC_message_commandscript();
 void AddSC_misc_commandscript();
-void AddSC_mmaps_commandscript();
 void AddSC_modify_commandscript();
 void AddSC_npc_commandscript();
 void AddSC_quest_commandscript();
@@ -573,6 +572,9 @@ void AddSC_outdoorpvp_gh();
 void AddSC_chat_log();
 void AddSC_character_creation();
 
+//Custom
+void AddSC_Dynamic_Resurrections();
+
 #endif
 
 void AddSpellScripts()
@@ -617,7 +619,6 @@ void AddCommandScripts()
     AddSC_lookup_commandscript();
     AddSC_message_commandscript();
     AddSC_misc_commandscript();
-    AddSC_mmaps_commandscript();
     AddSC_modify_commandscript();
     AddSC_npc_commandscript();
     AddSC_quest_commandscript();
@@ -646,6 +647,7 @@ void AddWorldScripts()
     AddSC_achievement_scripts();
     AddSC_chat_log();
     AddSC_character_creation();
+	AddSC_Dynamic_Resurrections();
 #endif
 }
 
@@ -1168,18 +1170,5 @@ void AddOutdoorPvPScripts()
     AddSC_outdoorpvp_tf();
     AddSC_outdoorpvp_zm();
     AddSC_outdoorpvp_gh();
-#endif
-}
-
-
-//~ **********************  Put your custom scripts below, like the commented examples, uncomment and edit *************************************
-
-
-//~ void AddSC_MySuperScript();
-
-void AddCustomScripts()
-{
-#ifdef SCRIPTS
-	//~ AddSC_MySuperScript();
 #endif
 }
