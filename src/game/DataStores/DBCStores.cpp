@@ -975,3 +975,4 @@ EmotesTextSoundEntry const* FindTextSoundEmoteFor(uint32 emote, uint32 race, uin
 	auto itr = sEmotesTextSoundMap.find(EmotesTextSoundKey(emote, race, gender));
 	return itr != sEmotesTextSoundMap.end() ? itr->second : nullptr;
 }
+
