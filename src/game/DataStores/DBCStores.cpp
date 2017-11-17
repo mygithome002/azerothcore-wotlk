@@ -1,4 +1,3 @@
-
 #include "DBCStores.h"
 
 #include "Log.h"
