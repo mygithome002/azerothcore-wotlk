@@ -1,8 +1,3 @@
-/*
-* Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: http://github.com/azerothcore/azerothcore-wotlk/LICENSE-GPL2
-* Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
-* Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
-*/
 
 #include "DBCStores.h"
 
@@ -975,4 +970,3 @@ EmotesTextSoundEntry const* FindTextSoundEmoteFor(uint32 emote, uint32 race, uin
 	auto itr = sEmotesTextSoundMap.find(EmotesTextSoundKey(emote, race, gender));
 	return itr != sEmotesTextSoundMap.end() ? itr->second : nullptr;
 }
-
