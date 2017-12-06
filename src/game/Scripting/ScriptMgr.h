@@ -19,6 +19,7 @@
 #include "Weather.h"
 #include "AchievementMgr.h"
 #include "DynamicObject.h"
+#include "ArenaTeam.h"
 
 class AuctionHouseObject;
 class AuraScript;
@@ -286,6 +287,9 @@ class FormulaScript : public ScriptObject
 
         // Called when calculating the experience rate for group experience.
         virtual void OnGroupRateCalculation(float& /*rate*/, uint32 /*count*/, bool /*isRaid*/) { }
+
+        // Called after calculating arena rating changes
+        virtual void OnAfterArenaRatingCalculation(Battleground *const /*bg*/, int32& /*winnerMatchmakerChange*/, int32& /*loserMatchmakerChange*/, int32& /*winnerChange*/, int32& /*loserChange*/) { };
 };
 
 template<class TMap> class MapScript : public UpdatableScript<TMap>
@@ -416,6 +420,79 @@ class ItemScript : public ScriptObject
         virtual void OnGossipSelectCode(Player* /*player*/, Item* /*item*/, uint32 /*sender*/, uint32 /*action*/, const char* /*code*/) { }
 };
 
+class UnitScript : public ScriptObject
+{
+protected:
+
+    UnitScript(const char* name, bool addToScripts = true);
+
+public:
+    // Called when a unit deals healing to another unit
+    virtual void OnHeal(Unit* /*healer*/, Unit* /*reciever*/, uint32& /*gain*/) { }
+
+    // Called when a unit deals damage to another unit
+    virtual void OnDamage(Unit* /*attacker*/, Unit* /*victim*/, uint32& /*damage*/) { }
+
+    // Called when DoT's Tick Damage is being Dealt
+    virtual void ModifyPeriodicDamageAurasTick(Unit* /*target*/, Unit* /*attacker*/, uint32& /*damage*/) { }
+
+    // Called when Melee Damage is being Dealt
+    virtual void ModifyMeleeDamage(Unit* /*target*/, Unit* /*attacker*/, uint32& /*damage*/) { }
+
+    // Called when Spell Damage is being Dealt
+    virtual void ModifySpellDamageTaken(Unit* /*target*/, Unit* /*attacker*/, int32& /*damage*/) { }
+
+    // Called when Heal is Recieved
+    virtual void ModifyHealRecieved(Unit* /*target*/, Unit* /*attacker*/, uint32& /*damage*/) { }
+
+    //Called when Damage is Dealt
+    virtual uint32 DealDamage(Unit* /*AttackerUnit*/, Unit* /*pVictim*/, uint32 damage, DamageEffectType /*damagetype*/) { return damage; }
+
+    virtual void OnBeforeRollMeleeOutcomeAgainst(const Unit* /*attacker*/, const Unit* /*victim*/, WeaponAttackType /*attType*/, int32 &/*attackerMaxSkillValueForLevel*/, int32 &/*victimMaxSkillValueForLevel*/, int32 &/*attackerWeaponSkill*/, int32 &/*victimDefenseSkill*/, int32& /*crit_chance*/, int32& /*miss_chance*/ , int32& /*dodge_chance*/ , int32& /*parry_chance*/ , int32& /*block_chance*/ ) {   };
+};
+
+class MovementHandlerScript : public ScriptObject
+{
+protected:
+   
+    MovementHandlerScript(const char* name);
+    
+public:
+    
+    //Called whenever a player moves
+    virtual void OnPlayerMove(Player* /*player*/, MovementInfo /*movementInfo*/, uint32 /*opcode*/) { }
+};
+
+class AllMapScript : public ScriptObject
+{
+protected:
+
+    AllMapScript(const char* name);
+
+public:
+
+    // Called when a player enters any Map
+    virtual void OnPlayerEnterAll(Map* /*map*/, Player* /*player*/) { }
+
+    // Called when a player leave any Map
+    virtual void OnPlayerLeaveAll(Map* /*map*/, Player* /*player*/) { }
+};
+
+class AllCreatureScript : public ScriptObject
+{
+protected:
+
+    AllCreatureScript(const char* name);
+
+public:
+
+    // Called from End of Creature Update.
+    virtual void OnAllCreatureUpdate(Creature* /*creature*/, uint32 /*diff*/) { }
+
+    // Called from End of Creature SelectLevel.
+    virtual void Creature_SelectLevel(const CreatureTemplate* /*cinfo*/, Creature* /*creature*/) { }
+};
+
 class CreatureScript : public ScriptObject, public UpdatableScript<Creature>
 {
     protected:
@@ -524,6 +601,7 @@ class BattlegroundScript : public ScriptObject
 
         // Should return a fully valid Battleground object for the type ID.
         virtual Battleground* GetBattleground() const = 0;
+
 };
 
 class OutdoorPvPScript : public ScriptObject
@@ -669,7 +747,11 @@ class AchievementCriteriaScript : public ScriptObject
         bool IsDatabaseBound() const { return true; }
 
         // Called when an additional criteria is checked.
-        virtual bool OnCheck(Player* source, Unit* target) = 0;
+        virtual bool OnCheck(Player* source, Unit* target, uint32 /*criteria_id*/) { 
+            return OnCheck(source, target);
+        }
+        // deprecated/legacy
+        virtual bool OnCheck(Player* /*source*/, Unit* /*target*/) { return true; };
 };
 
 class PlayerScript : public ScriptObject
@@ -679,8 +761,9 @@ class PlayerScript : public ScriptObject
         PlayerScript(const char* name);
 
     public:
+        virtual void OnPlayerReleasedGhost(Player* /*player*/) { }
 
-        // Called when a player kills another player
+		// Called when a player kills another player
         virtual void OnPVPKill(Player* /*killer*/, Player* /*killed*/) { }
 
         // Called when a player kills a creature
@@ -697,6 +780,9 @@ class PlayerScript : public ScriptObject
 
         // Called when a player's talent points are reset (right before the reset is done)
         virtual void OnTalentsReset(Player* /*player*/, bool /*noCost*/) { }
+
+        // Called for player::update
+        virtual void OnBeforeUpdate(Player* /*player*/, uint32 /*p_time*/){ }
 
         // Called when a player's money is modified (before the modification is done)
         virtual void OnMoneyChanged(Player* /*player*/, int32& /*amount*/) { }
@@ -735,6 +821,9 @@ class PlayerScript : public ScriptObject
         // Called in Spell::Cast.
         virtual void OnSpellCast(Player* /*player*/, Spell* /*spell*/, bool /*skipCheck*/) { }
 
+        // Called during data loading
+        virtual void OnLoadFromDB(Player* /*player*/) { };
+
         // Called when a player logs in.
         virtual void OnLogin(Player* /*player*/) { }
 
@@ -753,8 +842,14 @@ class PlayerScript : public ScriptObject
         // Called when a player switches to a new zone
         virtual void OnUpdateZone(Player* /*player*/, uint32 /*newZone*/, uint32 /*newArea*/) { }
 
+        // Called when a player switches to a new area (more accurate than UpdateZone)
+        virtual void OnUpdateArea(Player* /*player*/, uint32 /*oldArea*/, uint32 /*newArea*/) { }
+
         // Called when a player changes to a new map (after moving to new map)
         virtual void OnMapChanged(Player* /*player*/) { }
+
+        // Called before a player is being teleported to new coords
+        virtual bool OnBeforeTeleport(Player* /*player*/, uint32 /*mapid*/, float /*x*/, float /*y*/, float /*z*/, float /*orientation*/, uint32 /*options*/, Unit* /*target*/) { return true; }
 
         // Called when team/faction is set on player
         virtual void OnUpdateFaction(Player* /*player*/) { }
@@ -790,7 +885,42 @@ class PlayerScript : public ScriptObject
         virtual void OnAfterSetVisibleItemSlot(Player* /*player*/, uint8 /*slot*/, Item* /*item*/) { }
                
         // After an item has been moved from inventory
-        virtual void OnAfterMoveItemFromInventory(Player* /*player*/, Item* /*it*/,uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) { }
+        virtual void OnAfterMoveItemFromInventory(Player* /*player*/, Item* /*it*/, uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) { }
+
+        // After an item has been equipped
+        virtual void OnEquip(Player* /*player*/, Item* /*it*/, uint8 /*bag*/, uint8 /*slot*/, bool /*update*/) { }
+
+        // After player enters queue for BG
+        virtual void OnPlayerJoinBG(Player* /*player*/) { }
+
+        // After player enters queue for Arena
+        virtual void OnPlayerJoinArena(Player* /*player*/) { }
+        
+        //After looting item
+        virtual void OnLootItem(Player* /*player*/, Item* /*item*/, uint32 /*count*/, uint64 /*lootguid*/) { }
+
+        //After creating item (eg profession item creation)
+        virtual void OnCreateItem(Player* /*player*/, Item* /*item*/, uint32 /*count*/) { }
+
+        //After receiving item as a quest reward
+        virtual void OnQuestRewardItem(Player* /*player*/, Item* /*item*/, uint32 /*count*/) { }
+
+        //Before buying something from any vendor
+        virtual void OnBeforeBuyItemFromVendor(Player* /*player*/, uint64 /*vendorguid*/, uint32 /*vendorslot*/, uint32 &/*item*/, uint8 /*count*/, uint8 /*bag*/, uint8 /*slot*/) { };
+
+        //Before buying something from any vendor
+        virtual void OnAfterStoreOrEquipNewItem(Player* /*player*/, uint32 /*vendorslot*/, uint32& /*item*/, uint8 /*count*/, uint8 /*bag*/, uint8 /*slot*/, ItemTemplate const* /*pProto*/, Creature* /*pVendor*/, VendorItem const* /*crItem*/, bool /*bStore*/) { };
+
+        virtual void OnAfterUpdateMaxPower(Player* /*player*/, Powers& /*power*/, float& /*value*/) { }
+
+        virtual void OnAfterUpdateMaxHealth(Player* /*player*/, float& /*value*/) { }
+
+        virtual void OnBeforeUpdateAttackPowerAndDamage(Player* /*player*/, float& /*level*/, float& /*val2*/, bool /*ranged*/) { }
+        virtual void OnAfterUpdateAttackPowerAndDamage(Player* /*player*/, float& /*level*/, float& /*base_attPower*/, float& /*attPowerMod*/, float& /*attPowerMultiplier*/, bool /*ranged*/) { }
+
+        virtual void OnBeforeInitTalentForLevel(Player* /*player*/, uint8& /*level*/, uint32& /*talentPointsForLevel*/) { }
+
+        virtual void OnFirstLogin(Player* /*player*/) { }
 };
 
 class GuildScript : public ScriptObject
@@ -874,6 +1004,17 @@ class GlobalScript : public ScriptObject
         // items
         virtual void OnItemDelFromDB(SQLTransaction& /*trans*/, uint32 /*itemGuid*/) { }
         virtual void OnMirrorImageDisplayItem(const Item* /*item*/, uint32& /*display*/) { }
+        
+        // loot
+        virtual void OnAfterRefCount(Player const* /*player*/, LootStoreItem* /*LootStoreItem*/, Loot& /*loot*/, bool /*canRate*/, uint16 /*lootMode*/, uint32& /*maxcount*/) { }
+        virtual void OnBeforeDropAddItem(Player const* /*player*/, Loot& /*loot*/, bool /*canRate*/, uint16 /*lootMode*/, LootStoreItem* /*LootStoreItem*/) { }
+        virtual void OnBeforeItemRoll(Player const* /*player*/, Loot& /*loot*/, bool /*canRate*/, uint16 /*lootMode*/, LootStoreItem* /*LootStoreItem*/) { };
+
+        virtual void OnInitializeLockedDungeons(Player* /*player*/, uint8& /*level*/, uint32& /*lockData*/) { }
+        virtual void OnAfterInitializeLockedDungeons(Player* /*player*/) { }
+       
+        // On Before arena points distribution
+        virtual void OnBeforeUpdateArenaPoints(ArenaTeam* /*at*/, std::map<uint32, uint32> & /*ap*/) { }
 };
 
 // Placed here due to ScriptRegistry::AddScript dependency.
@@ -940,6 +1081,7 @@ class ScriptMgr
         void OnBaseGainCalculation(uint32& gain, uint8 playerLevel, uint8 mobLevel, ContentLevels content);
         void OnGainCalculation(uint32& gain, Player* player, Unit* unit);
         void OnGroupRateCalculation(float& rate, uint32 count, bool isRaid);
+        void OnAfterArenaRatingCalculation(Battleground *const bg, int32 &winnerMatchmakerChange, int32 &loserMatchmakerChange, int32 &winnerChange, int32 &loserChange);
 
     public: /* MapScript */
 
@@ -1047,10 +1189,13 @@ class ScriptMgr
 
     public: /* AchievementCriteriaScript */
 
-        bool OnCriteriaCheck(uint32 scriptId, Player* source, Unit* target);
+        bool OnCriteriaCheck(uint32 scriptId, Player* source, Unit* target, uint32 criteria_id);
 
     public: /* PlayerScript */
 
+
+        void OnBeforePlayerUpdate(Player* player, uint32 p_time);
+        void OnPlayerReleasedGhost(Player* player);
         void OnPVPKill(Player* killer, Player* killed);
         void OnCreatureKill(Player* killer, Creature* killed);
         void OnPlayerKilledByCreature(Creature* killer, Player* killed);
@@ -1072,11 +1217,14 @@ class ScriptMgr
         void OnPlayerTextEmote(Player* player, uint32 textEmote, uint32 emoteNum, uint64 guid);
         void OnPlayerSpellCast(Player* player, Spell* spell, bool skipCheck);
         void OnPlayerLogin(Player* player);
+        void OnPlayerLoadFromDB(Player* player);
         void OnPlayerLogout(Player* player);
         void OnPlayerCreate(Player* player);
         void OnPlayerDelete(uint64 guid);
         void OnPlayerBindToInstance(Player* player, Difficulty difficulty, uint32 mapid, bool permanent);
         void OnPlayerUpdateZone(Player* player, uint32 newZone, uint32 newArea);
+        void OnPlayerUpdateArea(Player* player, uint32 oldArea, uint32 newArea);
+        bool OnBeforePlayerTeleport(Player* player, uint32 mapid, float x, float y, float z, float orientation, uint32 options, Unit *target);
         void OnPlayerUpdateFaction(Player* player);
         void OnPlayerAddToBattleground(Player* player, Battleground* bg);
         void OnPlayerRemoveFromBattleground(Player* player, Battleground* bg);
@@ -1089,6 +1237,20 @@ class ScriptMgr
         void OnPlayerBeingCharmed(Player* player, Unit* charmer, uint32 oldFactionId, uint32 newFactionId);
         void OnAfterPlayerSetVisibleItemSlot(Player* player, uint8 slot, Item *item);
         void OnAfterPlayerMoveItemFromInventory(Player* player, Item* it, uint8 bag, uint8 slot, bool update);
+        void OnEquip(Player* player, Item* it, uint8 bag, uint8 slot, bool update);
+        void OnPlayerJoinBG(Player* player);
+        void OnPlayerJoinArena(Player* player);
+        void OnLootItem(Player* player, Item* item, uint32 count, uint64 lootguid);
+        void OnCreateItem(Player* player, Item* item, uint32 count);
+        void OnQuestRewardItem(Player* player, Item* item, uint32 count);
+        void OnBeforeBuyItemFromVendor(Player * player, uint64 vendorguid, uint32 vendorslot, uint32 &item, uint8 count, uint8 bag, uint8 slot);
+        void OnAfterStoreOrEquipNewItem(Player* player, uint32 vendorslot, uint32 &item, uint8 count, uint8 bag, uint8 slot, ItemTemplate const* pProto, Creature* pVendor, VendorItem const* crItem, bool bStore);
+        void OnAfterUpdateMaxPower(Player* player, Powers& power, float& value);
+        void OnAfterUpdateMaxHealth(Player* player, float& value);
+        void OnBeforeUpdateAttackPowerAndDamage(Player* player, float& level, float& val2, bool ranged);
+        void OnAfterUpdateAttackPowerAndDamage(Player* player, float& level, float& base_attPower, float& attPowerMod, float& attPowerMultiplier, bool ranged);
+        void OnBeforeInitTalentForLevel(Player* player, uint8& level, uint32& talentPointsForLevel);
+        void OnFirstLogin(Player* player);
 
     public: /* GuildScript */
 
@@ -1116,6 +1278,13 @@ class ScriptMgr
     public: /* GlobalScript */
         void OnGlobalItemDelFromDB(SQLTransaction& trans, uint32 itemGuid);
         void OnGlobalMirrorImageDisplayItem(const Item *item, uint32 &display);
+        void OnBeforeUpdateArenaPoints(ArenaTeam* at, std::map<uint32, uint32> &ap);
+        void OnAfterRefCount(Player const* player, Loot& loot, bool canRate, uint16 lootMode, LootStoreItem* LootStoreItem, uint32 &maxcount);
+        void OnBeforeDropAddItem(Player const* player, Loot& loot, bool canRate, uint16 lootMode, LootStoreItem* LootStoreItem);
+        void OnBeforeItemRoll(Player const* player, Loot& loot, bool canRate, uint16 lootMode, LootStoreItem* LootStoreItem);
+        void OnInitializeLockedDungeons(Player* player, uint8& level, uint32& lockData);
+        void OnAfterInitializeLockedDungeons(Player* player);
+
 
     public: /* Scheduled scripts */
 
@@ -1123,6 +1292,34 @@ class ScriptMgr
         uint32 DecreaseScheduledScriptCount() { return --_scheduledScripts; }
         uint32 DecreaseScheduledScriptCount(size_t count) { return _scheduledScripts -= count; }
         bool IsScriptScheduled() const { return _scheduledScripts > 0; }
+
+    public: /* UnitScript */
+
+        void OnHeal(Unit* healer, Unit* reciever, uint32& gain);
+        void OnDamage(Unit* attacker, Unit* victim, uint32& damage);
+        void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage);
+        void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage);
+        void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage);
+        void ModifyHealRecieved(Unit* target, Unit* attacker, uint32& addHealth);
+        uint32 DealDamage(Unit* AttackerUnit, Unit *pVictim, uint32 damage, DamageEffectType damagetype);
+        void OnBeforeRollMeleeOutcomeAgainst(const Unit* attacker, const Unit* victim, WeaponAttackType attType, int32 &attackerMaxSkillValueForLevel, int32 &victimMaxSkillValueForLevel, int32 &attackerWeaponSkill, int32 &victimDefenseSkill, int32 &crit_chance, int32 &miss_chance, int32 &dodge_chance, int32 &parry_chance, int32 &block_chance);
+
+    
+    public: /* MovementHandlerScript */
+        
+        void OnPlayerMove(Player* player, MovementInfo movementInfo, uint32 opcode);
+        
+    public: /* AllCreatureScript */
+
+        //listener function (OnAllCreatureUpdate) is called by OnCreatureUpdate
+        //void OnAllCreatureUpdate(Creature* creature, uint32 diff);
+        void Creature_SelectLevel(const CreatureTemplate *cinfo, Creature* creature);
+
+    public: /* AllMapScript */
+
+        //listener functions are called by OnPlayerEnterMap and OnPlayerLeaveMap
+        //void OnPlayerEnterAll(Map* map, Player* player);
+        //void OnPlayerLeaveAll(Map* map, Player* player);
 
     private:
 

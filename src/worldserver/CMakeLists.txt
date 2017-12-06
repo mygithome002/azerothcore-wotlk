@@ -44,7 +44,7 @@ endif()
 include_directories(
   ${CMAKE_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/modules/worldengine/deps/g3dlite/include
-  ${CMAKE_SOURCE_DIR}/modules/worldengine/deps/recastnavigation/Detour
+  ${CMAKE_SOURCE_DIR}/modules/worldengine/deps/recastnavigation/Detour/Include
   ${CMAKE_SOURCE_DIR}/modules/worldengine/deps/gsoap
   ${CMAKE_SOURCE_DIR}/modules/worldengine/deps/sockets/include
   ${CMAKE_SOURCE_DIR}/modules/worldengine/deps/SFMT
@@ -64,7 +64,30 @@ include_directories(
   ${CMAKE_SOURCE_DIR}/modules/worldengine/nucleus/src/Packets
   ${CMAKE_SOURCE_DIR}/modules/worldengine/nucleus/src/Threading
   ${CMAKE_SOURCE_DIR}/modules/worldengine/nucleus/src/Utilities
+  
+  ${CMAKE_SOURCE_DIR}/modules/bot
+  ${CMAKE_SOURCE_DIR}/modules/bot/pch
+  ${CMAKE_SOURCE_DIR}/modules/bot/ahbot
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/actions
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/DK
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/druid
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/generic
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/hunter
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/mage
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/paladin
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/priest
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/rogue
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/shaman
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/triggers
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/values
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/values/formations
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/warlock
+  ${CMAKE_SOURCE_DIR}/modules/bot/playerbot/strategy/warrior
+  
   ${CMAKE_SOURCE_DIR}/modules/acore/game-framework/src/Addons
+  ${game_INCLUDE_DIRS}
   ${CMAKE_SOURCE_DIR}/src/game
   ${CMAKE_SOURCE_DIR}/src/game/Accounts
   ${CMAKE_SOURCE_DIR}/src/game/Achievements
@@ -73,7 +96,7 @@ include_directories(
   ${CMAKE_SOURCE_DIR}/src/game/AI/ScriptedAI
   ${CMAKE_SOURCE_DIR}/src/game/AI/SmartScripts
   ${CMAKE_SOURCE_DIR}/src/game/AuctionHouse
-  ${CMAKE_SOURCE_DIR}/src/game/AuctionHouse/AuctionHouseBot
+  ${CMAKE_SOURCE_DIR}/src/game/AuctionHouseBot
   ${CMAKE_SOURCE_DIR}/src/game/Battlefield
   ${CMAKE_SOURCE_DIR}/src/game/Battlefield/Zones
   ${CMAKE_SOURCE_DIR}/src/game/Battlegrounds
@@ -168,12 +191,14 @@ set_target_properties(worldserver PROPERTIES LINK_FLAGS "${worldserver_LINK_FLAG
 
 target_link_libraries(worldserver
   game
+  bot
   shared
   scripts
   collision
   g3dlib
   gsoap
   Detour
+  ${GPERFTOOLS_LIBRARIES}
   ${JEMALLOC_LIBRARY}
   ${READLINE_LIBRARY}
   ${TERMCAP_LIBRARY}

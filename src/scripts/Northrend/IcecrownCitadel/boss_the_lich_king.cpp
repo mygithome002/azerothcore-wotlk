@@ -107,7 +107,7 @@ enum Spells
     SPELL_RISEN_WITCH_DOCTOR_SPAWN      = 69639,
     SPELL_SUMMON_SHAMBLING_HORROR       = 70372,
     SPELL_SUMMON_DRUDGE_GHOULS          = 70358,
-    SPELL_INFEST                        = 70541,
+    SPELL_INFEST                        = 70541, //cast time 2 sec
     SPELL_NECROTIC_PLAGUE               = 70337,
     SPELL_NECROTIC_PLAGUE_JUMP          = 70338,
     SPELL_PLAGUE_SIPHON                 = 74074,
@@ -116,12 +116,12 @@ enum Spells
     SPELL_SHADOW_TRAP_KNOCKBACK         = 73529,
 
     // Phase 2
-    SPELL_DEFILE                        = 72762,
+    SPELL_DEFILE                        = 72762, //cast time 2 sec
     SPELL_DEFILE_AURA                   = 72743,
     SPELL_DEFILE_GROW                   = 72756,
-    SPELL_SOUL_REAPER                   = 69409,
+    SPELL_SOUL_REAPER                   = 69409, // instant
     SPELL_SOUL_REAPER_BUFF              = 69410,
-    SPELL_SUMMON_VALKYR                 = 69037,
+    SPELL_SUMMON_VALKYR                 = 69037, // instant
     SPELL_SUMMON_VALKYR_PERIODIC        = 74361,
     SPELL_WINGS_OF_THE_DAMNED           = 74352,
     SPELL_VALKYR_TARGET_SEARCH          = 69030,
@@ -377,7 +377,7 @@ public:
             return false;
         if (_maxDist && _source->GetExactDist(target) > _maxDist)
             return false;
-        if (_exclude1 && target->HasAura(_exclude1) || _exclude2 && target->HasAura(_exclude2))
+        if ((_exclude1 && target->HasAura(_exclude1)) || (_exclude2 && target->HasAura(_exclude2)))
             return false;
         if (_reqLOS && !_source->IsWithinLOSInMap(target))
             return false;
@@ -956,7 +956,7 @@ class boss_the_lich_king : public CreatureScript
                 if (me->HasUnitState(UNIT_STATE_CASTING) && !((1 << _phase) & PHASE_MASK_NO_CAST_CHECK))
                     return;
 
-                switch (uint32 eventId = events.ExecuteEvent())
+                switch (events.ExecuteEvent())
                 {
                     case EVENT_BERSERK:
                         Talk(SAY_LK_BERSERK);
@@ -980,10 +980,10 @@ class boss_the_lich_king : public CreatureScript
                     case EVENT_QUAKE:
                         _phase = PHASE_TWO;
                         events.CancelEventGroup(EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_INFEST, 8000, EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_SUMMON_VALKYR, 15000, EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_SOUL_REAPER, 22000, EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_DEFILE, 32500, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_INFEST, 14000, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_SUMMON_VALKYR, 20000, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_SOUL_REAPER, 40000, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_DEFILE, 38000, EVENT_GROUP_ABILITIES);
 
                         me->InterruptNonMeleeSpells(false);
                         me->ClearUnitState(UNIT_STATE_CASTING);
@@ -995,10 +995,10 @@ class boss_the_lich_king : public CreatureScript
                     case EVENT_QUAKE_2:
                         _phase = PHASE_THREE;
                         events.CancelEventGroup(EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_SOUL_REAPER, 25000, EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_DEFILE, 32500, EVENT_GROUP_ABILITIES);
-                        events.ScheduleEvent(EVENT_VILE_SPIRITS, 18000, EVENT_GROUP_VILE_SPIRITS);
-                        events.ScheduleEvent(IsHeroic() ? EVENT_HARVEST_SOULS : EVENT_HARVEST_SOUL, 11000, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_SOUL_REAPER, 40000, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_DEFILE, 38000, EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_VILE_SPIRITS, 20000, EVENT_GROUP_VILE_SPIRITS);
+                        events.ScheduleEvent(IsHeroic() ? EVENT_HARVEST_SOULS : EVENT_HARVEST_SOUL, 14000, EVENT_GROUP_ABILITIES);
 
                         me->InterruptNonMeleeSpells(false);
                         me->ClearUnitState(UNIT_STATE_CASTING);
@@ -1020,7 +1020,7 @@ class boss_the_lich_king : public CreatureScript
                         break;
                     case EVENT_INFEST:
                         me->CastSpell(me, SPELL_INFEST, false);
-                        events.ScheduleEvent(EVENT_INFEST, urand(21000, 22000), EVENT_GROUP_ABILITIES);
+                        events.ScheduleEvent(EVENT_INFEST, 22500, EVENT_GROUP_ABILITIES);
                         break;
                     case EVENT_NECROTIC_PLAGUE:
                         if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, NecroticPlagueTargetCheck(me, NECROTIC_PLAGUE_LK, NECROTIC_PLAGUE_PLR)))
@@ -1040,7 +1040,7 @@ class boss_the_lich_king : public CreatureScript
                     case EVENT_PAIN_AND_SUFFERING:
                         if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, 0.0f, true))
                         {
-                            events.DelayEventsToMax(500, EVENT_GROUP_ABILITIES);
+                            //events.DelayEventsToMax(500, EVENT_GROUP_ABILITIES);
                             me->SetOrientation(me->GetAngle(target));
                             me->CastSpell(target, SPELL_PAIN_AND_SUFFERING, false);
                         }
@@ -1058,33 +1058,43 @@ class boss_the_lich_king : public CreatureScript
                     case EVENT_DEFILE:
                         {
                             uint32 evTime = events.GetNextEventTime(EVENT_SUMMON_VALKYR);
-                            if (evTime && (events.GetTimer() > evTime || evTime - events.GetTimer() < 5000)) // defile cast 2sec -> valkyr in less than 3 secs after defile appears
+                            // if defile (cast time 2sec) is less than 3 before valkyr appears
+                            // we've to decide 
+                            if (evTime && (events.GetTimer() > evTime || evTime - events.GetTimer() < 5000)) 
                             {
-                                if (events.GetTimer() > evTime || evTime - events.GetTimer() < 3500) // valkyr is less than 1.5 secs after defile - reschedule defile
+                                // if valkyr is less than 1.5 secs after defile (cast time 2 sec) then we've a sync issue, so
+                                // we need to cancel it (break) and schedule a defile to be casted 5 or 4 seconds after valkyr
+                                if (events.GetTimer() > evTime || evTime - events.GetTimer() < 3500) 
                                 {
                                     uint32 t = events.GetTimer() > evTime ? 0 : evTime - events.GetTimer();
                                     events.ScheduleEvent(EVENT_DEFILE, t+(Is25ManRaid() ? 5000 : 4000), EVENT_GROUP_ABILITIES);
                                     break;
-                                }
+                                } 
+
+                                // if valkyr is coming between 1.5 and 3 seconds after defile then we've to
                                 // delay valkyr just a bit
                                 events.RescheduleEvent(EVENT_SUMMON_VALKYR, 5000, EVENT_GROUP_ABILITIES);
                             }
+
                             if (Unit* target = SelectTarget(SELECT_TARGET_RANDOM, 0, DefileTargetSelector(me)))
                             {
                                 Talk(EMOTE_DEFILE_WARNING);
                                 me->CastSpell(target, SPELL_DEFILE, false);
-                                events.ScheduleEvent(EVENT_DEFILE, urand(31000, 34000), EVENT_GROUP_ABILITIES);
+                                // defile has a fixed CD (from dbm) that can be variable only
+                                // if no target has been found at the moment (schedule after 1 second)
+                                events.ScheduleEvent(EVENT_DEFILE, 32500, EVENT_GROUP_ABILITIES);
                             }
-                            else
-                                events.ScheduleEvent(EVENT_DEFILE, 2000, EVENT_GROUP_ABILITIES);
+                            else {
+                                // be sure it happen trying each seconds if no target
+                                events.ScheduleEvent(EVENT_DEFILE, 1000, EVENT_GROUP_ABILITIES);
+                            }
                         }
                         break;
                     case EVENT_SOUL_REAPER:
                         if (me->IsWithinMeleeRange(me->GetVictim()))
                         {
                             me->CastSpell(me->GetVictim(), SPELL_SOUL_REAPER, false);
-                            events.DelayEventsToMax(12000, EVENT_GROUP_ABILITIES);
-                            events.ScheduleEvent(EVENT_SOUL_REAPER, 30000, EVENT_GROUP_ABILITIES);
+                            events.ScheduleEvent(EVENT_SOUL_REAPER, 30500, EVENT_GROUP_ABILITIES);
                         }
                         else
                             events.ScheduleEvent(EVENT_SOUL_REAPER, 1000, EVENT_GROUP_ABILITIES);
@@ -1094,12 +1104,15 @@ class boss_the_lich_king : public CreatureScript
                             me->GetMap()->SetZoneMusic(AREA_THE_FROZEN_THRONE, MUSIC_SPECIAL);
                             Talk(SAY_LK_SUMMON_VALKYR);
                             me->CastSpell((Unit*)NULL, SUMMON_VALKYR, false);
-                            events.ScheduleEvent(EVENT_SUMMON_VALKYR, urand(45000, 48000), EVENT_GROUP_ABILITIES);
+                            events.ScheduleEvent(EVENT_SUMMON_VALKYR, 45000, EVENT_GROUP_ABILITIES);
 
+                            // schedule a defile (or reschedule it) if next defile event 
+                            // doesn't exist ( now > next defile ) or defile is coming too soon
                             uint32 minTime = (Is25ManRaid() ? 5000 : 4000);
                             if (uint32 evTime = events.GetNextEventTime(EVENT_DEFILE))
-                                if (events.GetTimer() > evTime || evTime - events.GetTimer() < minTime)
+                                if (events.GetTimer() > evTime || evTime - events.GetTimer() < minTime) {
                                     events.RescheduleEvent(EVENT_DEFILE, minTime, EVENT_GROUP_ABILITIES);
+                                }
                         }
                         break;
                     case EVENT_VILE_SPIRITS:
@@ -1112,7 +1125,7 @@ class boss_the_lich_king : public CreatureScript
                         {
                             Talk(SAY_LK_HARVEST_SOUL);
                             me->CastSpell(target, SPELL_HARVEST_SOUL, false);
-                            events.ScheduleEvent(EVENT_HARVEST_SOUL, 70000, EVENT_GROUP_ABILITIES);
+                            events.ScheduleEvent(EVENT_HARVEST_SOUL, 75000, EVENT_GROUP_ABILITIES);
                         }
                         else
                             events.ScheduleEvent(EVENT_HARVEST_SOUL, 10000, EVENT_GROUP_ABILITIES);
@@ -1238,7 +1251,7 @@ class npc_tirion_fordring_tft : public CreatureScript
             void Reset()
             {
                 _events.Reset();
-                if (_instance->GetBossState(DATA_THE_LICH_KING) == DONE || me->GetMap()->IsHeroic() && !_instance->GetData(DATA_LK_HC_AVAILABLE))
+                if (_instance->GetBossState(DATA_THE_LICH_KING) == DONE || (me->GetMap()->IsHeroic() && !_instance->GetData(DATA_LK_HC_AVAILABLE)))
                     me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
                 me->SetReactState(REACT_PASSIVE);
             }
@@ -1310,7 +1323,7 @@ class npc_tirion_fordring_tft : public CreatureScript
             void JustReachedHome()
             {
                 ScriptedAI::JustReachedHome();
-                if (!(_instance->GetBossState(DATA_THE_LICH_KING) == DONE || me->GetMap()->IsHeroic() && !_instance->GetData(DATA_LK_HC_AVAILABLE)))
+                if (!(_instance->GetBossState(DATA_THE_LICH_KING) == DONE || (me->GetMap()->IsHeroic() && !_instance->GetData(DATA_LK_HC_AVAILABLE))))
                     me->SetFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP);
                 me->SetUInt32Value(UNIT_NPC_EMOTESTATE, EMOTE_ONESHOT_NONE);
             }
@@ -1342,7 +1355,7 @@ class npc_tirion_fordring_tft : public CreatureScript
                 if (me->HasUnitState(UNIT_STATE_CASTING))
                     return;
 
-                switch (uint32 eventId = _events.ExecuteEvent())
+                switch (_events.ExecuteEvent())
                 {
                     case EVENT_INTRO_LK_MOVE:
                         if (Creature* theLichKing = ObjectAccessor::GetCreature(*me, _instance->GetData64(DATA_THE_LICH_KING)))
@@ -1799,7 +1812,7 @@ class npc_shambling_horror_icc : public CreatureScript
                 if (me->HasUnitState(UNIT_STATE_CASTING))
                     return;
 
-                switch (uint32 eventId = _events.ExecuteEvent())
+                switch (_events.ExecuteEvent())
                 {
                     case EVENT_SHOCKWAVE:
                         me->CastSpell(me->GetVictim(), SPELL_SHOCKWAVE, false);
@@ -2329,7 +2342,7 @@ class npc_raging_spirit : public CreatureScript
                 if (me->HasUnitState(UNIT_STATE_CASTING))
                     return;
 
-                switch (uint32 eventId = _events.ExecuteEvent())
+                switch (_events.ExecuteEvent())
                 {
                     case EVENT_RAGING_SPIRIT_UNROOT:
                         {
@@ -2485,11 +2498,11 @@ class npc_valkyr_shadowguard : public CreatureScript
             }
 
             EventMap _events;
-            InstanceScript* _instance;
             Position _destPoint;
             uint64 _grabbedPlayer;
             bool didbelow50pct;
             bool dropped;
+            InstanceScript* _instance;
 
             bool IsHeroic() { return me->GetMap()->IsHeroic(); }
 
@@ -2505,9 +2518,9 @@ class npc_valkyr_shadowguard : public CreatureScript
                 _events.ScheduleEvent(EVENT_MOVE_TO_SIPHON_POS, 0);
             }
 
-            void OnCharmed(bool apply) {}
+            void OnCharmed(bool  /*apply*/) {}
 
-            void PassengerBoarded(Unit* pass, int8 seat, bool apply)
+            void PassengerBoarded(Unit* pass, int8  /*seat*/, bool apply)
             {
                 if (apply)
                 {
@@ -2581,10 +2594,10 @@ class npc_valkyr_shadowguard : public CreatureScript
                             }
                             dropped = true;
                             _events.Reset();
-                            Player* p = NULL;
+                            /*Player* p = NULL;
                             if (Vehicle* v = me->GetVehicleKit())
                                 if (Unit* passenger = v->GetPassenger(0))
-                                    p = passenger->ToPlayer();
+                                    p = passenger->ToPlayer();*/
                             me->CastSpell((Unit*)NULL, SPELL_EJECT_ALL_PASSENGERS, false);
 
                             if (IsHeroic())
@@ -2619,7 +2632,7 @@ class npc_valkyr_shadowguard : public CreatureScript
                 if (me->HasUnitState(UNIT_STATE_CASTING | UNIT_STATE_STUNNED))
                     return;
 
-                switch (uint32 eventId = _events.ExecuteEvent())
+                switch (_events.ExecuteEvent())
                 {
                     case EVENT_GRAB_PLAYER:
                         if (!_grabbedPlayer)
@@ -2723,7 +2736,7 @@ class spell_the_lich_king_teleport_to_frostmourne_hc : public SpellScriptLoader
         {
             PrepareSpellScript(spell_the_lich_king_teleport_to_frostmourne_hc_SpellScript);
 
-            void ModDest(SpellEffIndex effIndex)
+            void ModDest(SpellEffIndex  /*effIndex*/)
             {
                 float dist = 2.0f + rand_norm()*18.0f;
                 float angle = rand_norm()*2*M_PI;
@@ -3109,8 +3122,8 @@ class npc_strangulate_vehicle : public CreatureScript
             }
 
             bool IsHeroic() { return me->GetMap()->IsHeroic(); }
-            void OnCharmed(bool apply) {}
-            void PassengerBoarded(Unit* pass, int8 seat, bool apply)
+            void OnCharmed(bool  /*apply*/) {}
+            void PassengerBoarded(Unit* pass, int8  /*seat*/, bool apply)
             {
                 if (!apply)
                     pass->RemoveAurasDueToSpell(VEHICLE_SPELL_PARACHUTE);
@@ -3154,7 +3167,7 @@ class npc_strangulate_vehicle : public CreatureScript
             {
                 _events.Update(diff);
 
-                switch (uint32 eventId = _events.ExecuteEvent())
+                switch (_events.ExecuteEvent())
                 {
                     case EVENT_TELEPORT:
                         me->GetMotionMaster()->Clear(false);
@@ -3281,7 +3294,7 @@ class npc_terenas_menethil : public CreatureScript
 
                 _events.Update(diff);
 
-                switch (uint32 eventId = _events.ExecuteEvent())
+                switch (_events.ExecuteEvent())
                 {
                     case EVENT_FROSTMOURNE_TALK_1:
                         me->SetControlled(false, UNIT_STATE_ROOT);

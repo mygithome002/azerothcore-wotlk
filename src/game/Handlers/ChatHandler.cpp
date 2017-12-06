@@ -29,6 +29,9 @@
 #include "ScriptMgr.h"
 #include "AccountMgr.h"
 
+ // Playerbot mod:
+#include "../../modules/bot/playerbot/playerbot.h"
+
 void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
 {
     uint32 type;
@@ -66,14 +69,17 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
             case CHAT_MSG_PARTY_LEADER:
                 break;
             default:
-                /*[AC] we should enable it using a conf
-		if (sender->GetTotalPlayedTime() < 2*HOUR)
+                if (sWorld->getBoolConfig(CONFIG_CHAT_MUTE_FIRST_LOGIN))
                 {
-                    SendNotification("Speaking is allowed after playing for at least 2 hours. You may use party and guild chat.");
-                    recvData.rfinish();
-                    return;
-                }*/
-	    break;
+                    uint32 minutes = sWorld->getIntConfig(CONFIG_CHAT_TIME_MUTE_FIRST_LOGIN);
+
+                    if (sender->GetTotalPlayedTime() < minutes * MINUTE)
+                    {
+                        SendNotification(LANG_MUTED_PLAYER, minutes);
+                        recvData.rfinish();
+                        return;
+                    }
+                }
         }
 
     // pussywizard:
@@ -368,7 +374,17 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
             if (!senderIsPlayer && !sender->isAcceptWhispers() && !sender->IsInWhisperWhiteList(receiver->GetGUID()))
                 sender->AddWhisperWhiteList(receiver->GetGUID());
 
-            GetPlayer()->Whisper(msg, lang, receiver->GetGUID());
+			// Playerbot mod: handle whispered command to bot
+			if (receiver->GetPlayerbotAI() && lang != LANG_ADDON)
+			{
+				receiver->GetPlayerbotAI()->HandleCommand(type, msg, *GetPlayer());
+				receiver->m_speakTime = 0;
+				receiver->m_speakCount = 0;
+			}
+			else
+			{
+				GetPlayer()->Whisper(msg, lang, receiver->GetGUID());
+			}
         } break;
         case CHAT_MSG_PARTY:
         case CHAT_MSG_PARTY_LEADER:
@@ -384,6 +400,18 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
 
             if (type == CHAT_MSG_PARTY_LEADER && !group->IsLeader(sender->GetGUID()))
                 return;
+
+			// Playerbot mod: broadcast message to bot members
+			for (GroupReference* itr = group->GetFirstMember(); itr != NULL; itr = itr->next())
+			{
+				Player* player = itr->GetSource();
+				if (player && player->GetPlayerbotAI() && lang != LANG_ADDON)
+				{
+					player->GetPlayerbotAI()->HandleCommand(type, msg, *GetPlayer());
+					GetPlayer()->m_speakTime = 0;
+					GetPlayer()->m_speakCount = 0;
+				}
+			}
 
             sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
 
@@ -401,6 +429,18 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
 
                     guild->BroadcastToGuild(this, false, msg, lang == LANG_ADDON ? LANG_ADDON : LANG_UNIVERSAL);
                 }
+
+				// Playerbot mod: broadcast message to bot members
+				PlayerbotMgr *mgr = GetPlayer()->GetPlayerbotMgr();
+				if (mgr && lang != LANG_ADDON)
+				{
+					for (PlayerBotMap::const_iterator it = mgr->GetPlayerBotsBegin(); it != mgr->GetPlayerBotsEnd(); ++it)
+					{
+						Player* const bot = it->second;
+						if (bot->GetGuildId() == GetPlayer()->GetGuildId())
+							bot->GetPlayerbotAI()->HandleCommand(type, msg, *GetPlayer());
+					}
+				}
             }
         } break;
         case CHAT_MSG_OFFICER:
@@ -426,6 +466,18 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
                     return;
             }
 
+			// Playerbot mod: broadcast message to bot members
+			for (GroupReference* itr = group->GetFirstMember(); itr != NULL; itr = itr->next())
+			{
+				Player* player = itr->GetSource();
+				if (player && player->GetPlayerbotAI() && lang != LANG_ADDON)
+				{
+					player->GetPlayerbotAI()->HandleCommand(type, msg, *GetPlayer());
+					GetPlayer()->m_speakTime = 0;
+					GetPlayer()->m_speakCount = 0;
+				}
+			}
+
             sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
 
             WorldPacket data;
@@ -443,6 +495,18 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
                     return;
             }
 
+			// Playerbot mod: broadcast message to bot members
+			for (GroupReference* itr = group->GetFirstMember(); itr != NULL; itr = itr->next())
+			{
+				Player* player = itr->GetSource();
+				if (player && player->GetPlayerbotAI() && lang != LANG_ADDON)
+				{
+					player->GetPlayerbotAI()->HandleCommand(type, msg, *GetPlayer());
+					GetPlayer()->m_speakTime = 0;
+					GetPlayer()->m_speakCount = 0;
+				}
+			}
+
             sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
 
             WorldPacket data;
@@ -454,6 +518,18 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
             Group* group = GetPlayer()->GetGroup();
             if (!group || !group->isRaidGroup() || !(group->IsLeader(GetPlayer()->GetGUID()) || group->IsAssistant(GetPlayer()->GetGUID())) || group->isBGGroup())
                 return;
+
+			// Playerbot mod: broadcast message to bot members
+			for (GroupReference* itr = group->GetFirstMember(); itr != NULL; itr = itr->next())
+			{
+				Player* player = itr->GetSource();
+				if (player && player->GetPlayerbotAI() && lang != LANG_ADDON)
+				{
+					player->GetPlayerbotAI()->HandleCommand(type, msg, *GetPlayer());
+					GetPlayer()->m_speakTime = 0;
+					GetPlayer()->m_speakCount = 0;
+				}
+			}
 
             sScriptMgr->OnPlayerChat(GetPlayer(), type, lang, msg, group);
 
@@ -503,7 +579,14 @@ void WorldSession::HandleMessagechatOpcode(WorldPacket & recvData)
             {
                 if (Channel* chn = cMgr->GetChannel(channel, sender))
                 {
-                    sScriptMgr->OnPlayerChat(sender, type, lang, msg, chn);
+					// Playerbot mod: broadcast message to bot members
+					if (_player->GetPlayerbotMgr() && lang != LANG_ADDON && chn->GetFlags() & 0x18)
+					{
+						_player->GetPlayerbotMgr()->HandleCommand(type, msg);
+					}
+					sRandomPlayerbotMgr.HandleCommand(type, msg, *_player);
+
+					sScriptMgr->OnPlayerChat(sender, type, lang, msg, chn);
 
                     chn->Say(sender->GetGUID(), msg.c_str(), lang);
                 }
@@ -696,7 +779,12 @@ void WorldSession::HandleChatIgnoredOpcode(WorldPacket& recvData)
 
 void WorldSession::HandleChannelDeclineInvite(WorldPacket &recvPacket)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "Opcode %u", recvPacket.GetOpcode());
+    // used only with EXTRA_LOGS
+    UNUSED(recvPacket);
+
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "Opcode %u", recvPacket.GetOpcode());
+#endif
 }
 
 void WorldSession::SendPlayerNotFoundNotice(std::string const& name)

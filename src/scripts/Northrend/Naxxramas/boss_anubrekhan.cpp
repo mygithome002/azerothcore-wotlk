@@ -64,9 +64,11 @@ public:
 
         void SummonCryptGuards()
         {
-            me->SummonCreature(NPC_CRYPT_GUARD, 3308.590f, -3466.29f, 287.16f, M_PI, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
-            if (IsHeroic())
-                me->SummonCreature(NPC_CRYPT_GUARD, 3308.590f, -3486.29f, 287.16f, M_PI, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
+            if (Is25ManRaid())
+            {
+                me->SummonCreature(NPC_CRYPT_GUARD, 3299.825f, -3502.27f, 287.16f, M_PI, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
+                me->SummonCreature(NPC_CRYPT_GUARD, 3299.087f, -3450.93f, 287.16f, M_PI, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
+            }
         }
 
         void Reset() 
@@ -105,7 +107,7 @@ public:
 
         void SummonedCreatureDespawn(Creature* cr) { summons.Despawn(cr); }
 
-        void JustDied(Unit* Killer)
+        void JustDied(Unit*  /*Killer*/)
         {
             summons.DespawnAll();
             if (pInstance)
@@ -130,7 +132,7 @@ public:
                 pInstance->SetData(DATA_IMMORTAL_FAIL, 0);
         }
 
-        void EnterCombat(Unit *who)
+        void EnterCombat(Unit * /*who*/)
         {
             me->CallForHelp(30.0f); // catch helpers
             Talk(SAY_AGGRO);
@@ -177,12 +179,14 @@ public:
                     events.RepeatEvent(20000);
                     break;
                 case EVENT_SPELL_LOCUST_SWARM:
+                {
                     me->CastSpell(me, RAID_MODE(SPELL_LOCUST_SWARM_10, SPELL_LOCUST_SWARM_25), false);
                     Position pos;
-                    me->GetNearPosition(pos, 10.0f, rand_norm()*2*M_PI);
+                    me->GetNearPosition(pos, 10.0f, rand_norm() * 2 * M_PI);
                     me->SummonCreature(NPC_CRYPT_GUARD, pos);
                     events.RepeatEvent(90000);
                     break;
+                }
                 case EVENT_SPELL_BERSERK:
                     me->CastSpell(me, SPELL_BERSERK, true);
                     events.PopEvent();

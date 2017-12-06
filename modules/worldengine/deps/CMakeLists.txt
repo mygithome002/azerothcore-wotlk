@@ -8,16 +8,22 @@
 # WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
-if( CMAKE_COMPILER_IS_GNUCXX )
-  add_definitions(--no-warnings)
-elseif( MSVC )
+if( MSVC )
+  string(REGEX REPLACE "/W[0-4] " "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+  string(REGEX REPLACE "/W[0-4] " "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
   add_definitions(/W0)
+else()
+  add_definitions(-w)
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   if(SERVERS AND NOT NOJEM)
     add_subdirectory(jemalloc)  
   endif()
+  if(TOOLS)
+    add_subdirectory(bzip2)
+  endif()
+  add_subdirectory(zlib)
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Windows")

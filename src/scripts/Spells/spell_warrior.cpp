@@ -189,7 +189,7 @@ class spell_warr_improved_spell_reflection_trigger : public SpellScriptLoader
             PrepareAuraScript(spell_warr_improved_spell_reflection_trigger_AuraScript);
 
 
-            void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes mode)
+            void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes  /*mode*/)
             {
                 if (!IsExpired())
                 {
@@ -592,7 +592,7 @@ class spell_warr_overpower : public SpellScriptLoader
 
                 if (Player* target = GetHitPlayer())
                     if (target->HasUnitState(UNIT_STATE_CASTING))
-                        target->CastSpell(target, spellId, true);
+                        target->CastSpell(target, spellId, true, 0, 0, GetCaster()->GetGUID());
             }
 
             void Register()

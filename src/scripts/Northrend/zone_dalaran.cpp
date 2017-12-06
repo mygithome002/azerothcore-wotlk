@@ -107,6 +107,22 @@ enum DisguiseMisc
     NPC_AQUANOS_ENTRY               = 36851,
 };
 
+enum spells
+{
+    // Sewers Warrior Spells
+    SPELL_WARRIOR_BATTLESHOUT       = 9128,
+    SPELL_WARRIOR_DISARM            = 6713,
+    SPELL_WARRIOR_SHOUT             = 19134,
+    SPELL_WARRIOR_HAMSTRING         = 9080,
+
+    // Sewers Mage Spells
+    SPELL_BLINK                     = 14514,
+    SPELL_BLIZZARD                  = 44178,
+    SPELL_COC                       = 12611,
+    SPELL_FROST_NOVA                = 15532,
+    SPELL_FROSTFIRE                 = 44614
+};
+
 class npc_shandy_dalaran : public CreatureScript
 {
 public:
@@ -122,7 +138,7 @@ public:
             _aquanosGUID = 0;
         }  
         
-        void SetData(uint32 type, uint32 data)
+        void SetData(uint32 type, uint32  /*data*/)
         {
             switch(type)
             {
@@ -213,11 +229,10 @@ public:
             uint64 _aquanosGUID;
             uint8 _lCount;
             uint32 _lSource;
-            uint32 _resetTime;
-            
+
             bool _canWash;
     };
-    
+
     bool OnGossipHello(Player* player, Creature* creature)
     {
         if (creature->IsQuestGiver())
@@ -235,7 +250,7 @@ public:
         player->SEND_GOSSIP_MENU(player->GetGossipTextId(creature), creature->GetGUID());
         return true;
     }
-    
+
     bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action)
     {
         switch (action)
@@ -430,7 +445,7 @@ public:
             if (!who || !who->IsInWorld() || who->GetZoneId() != 4395)
                 return;
 
-            if (!me->IsWithinDist(who, 40.0f, false))
+            if (!me->IsWithinDist(who, 5.0f, false))
                 return;
 
             Player* player = who->GetCharmerOrOwnerPlayerOrPlayerItself();
@@ -561,13 +576,15 @@ class npc_minigob_manabonk : public CreatureScript
                             events.ScheduleEvent(EVENT_BLINK, 3*IN_MILLISECONDS);
                             break;
                         case EVENT_BLINK:
+                        {
                             DoCast(me, SPELL_IMPROVED_BLINK);
                             Position pos;
                             me->GetRandomNearPosition(pos, (urand(15, 40)));
                             me->GetMotionMaster()->MovePoint(0, pos.m_positionX, pos.m_positionY, pos.m_positionZ);
-                            events.ScheduleEvent(EVENT_DESPAWN, 3*IN_MILLISECONDS);
+                            events.ScheduleEvent(EVENT_DESPAWN, 3 * IN_MILLISECONDS);
                             events.ScheduleEvent(EVENT_DESPAWN_VISUAL, 2.5*IN_MILLISECONDS);
                             break;
+                        }
                         case EVENT_DESPAWN_VISUAL:
                             DoCast(me, SPELL_TELEPORT_VISUAL);
                             break;
@@ -590,6 +607,195 @@ class npc_minigob_manabonk : public CreatureScript
     }
 };
 
+class npc_dalaran_mage : public CreatureScript
+{
+public:
+    npc_dalaran_mage() : CreatureScript("npc_dalaran_mage") {}
+
+    CreatureAI* GetAI(Creature* creature) const
+    {
+        return new npc_dalaran_mageAI(creature);
+    }
+
+    struct npc_dalaran_mageAI : public ScriptedAI
+    {
+        npc_dalaran_mageAI(Creature* creature) : ScriptedAI(creature)
+        {
+
+        }
+
+        uint32 CoC_Timer;
+        uint32 frostnova_timer;
+        uint32 blink_timer;
+        uint32 blizzard_timer;
+        uint32 frostfire_timer;
+        uint32 restoremana_timer;
+
+        void Initialize()
+        {
+            CoC_Timer = 20000;
+            frostnova_timer = 55000;
+            blink_timer = 35000;
+            blizzard_timer = 30000;
+            frostfire_timer = 1000;
+            restoremana_timer = 10000;
+        }
+
+        void Reset()
+        {
+            Initialize();
+            me->AddAura(1908, me);
+        }
+
+        void EnterCombat(Unit* /*who*/)
+        {
+        }
+        void UpdateAI(uint32 diff)
+        {
+
+            if (!UpdateVictim())
+                return;
+
+            if (me->HasUnitState(UNIT_STATE_CASTING))
+                return;
+
+            if (restoremana_timer <= diff)
+            {
+                me->SetPower(POWER_MANA, (me->GetMaxPower(POWER_MANA)));
+                restoremana_timer = 10000;
+            }
+            else
+                restoremana_timer -= diff;
+
+            if (frostfire_timer <= diff)
+            {
+                DoCast(SPELL_FROSTFIRE);
+                frostfire_timer = urand(1000, 3000);
+            }
+            else
+                frostfire_timer -= diff;
+
+            if (CoC_Timer <= diff)
+            {
+                DoCast(SPELL_COC);
+                CoC_Timer = urand(10000, 15000);
+            }
+            else
+                CoC_Timer -= diff;
+
+            if (blizzard_timer <= diff)
+            {
+                DoCast(SPELL_BLIZZARD);
+                blizzard_timer = urand(20000, 30000);
+            }
+            else
+                blizzard_timer -= diff;
+
+            if (frostnova_timer <= diff)
+            {
+                DoCast(SPELL_FROST_NOVA);
+                frostnova_timer = urand(30000, 40000);
+            }
+            else
+                frostnova_timer -= diff;
+
+            if (blink_timer <= diff)
+            {
+                DoCast(SPELL_BLINK);
+                blink_timer = urand(20000, 25000);
+            }
+            else
+                blink_timer -= diff;
+
+            DoMeleeAttackIfReady();
+        }
+    };
+};
+
+
+    class npc_dalaran_warrior : public CreatureScript
+    {
+    public:
+        npc_dalaran_warrior() : CreatureScript("npc_dalaran_warrior") {}
+
+        CreatureAI* GetAI(Creature* creature) const
+        {
+            return new npc_dalaran_warriorAI(creature);
+        }
+
+        struct npc_dalaran_warriorAI : public ScriptedAI
+        {
+            npc_dalaran_warriorAI(Creature* creature) : ScriptedAI(creature)
+            {
+                Battleshout_timer = 1000;
+            }
+
+            uint32 Battleshout_timer;
+            uint32 hamstring_timer;
+            uint32 disarm_timer;
+            uint32 shout_timer;
+
+            void Initialize()
+            {
+                Battleshout_timer = 120000;
+                shout_timer = 60000;
+                hamstring_timer = 30000;
+                disarm_timer = 50000;
+            }
+
+            void Reset()
+            {
+                Initialize();
+            }
+
+            void EnterCombat(Unit* /*who*/)
+            {
+                me->AddAura(1908, me);
+                Battleshout_timer = 1000;
+            }
+            void UpdateAI(uint32 diff)
+            {
+            
+                if (!UpdateVictim())
+                    return;
+
+                if (Battleshout_timer <= diff)
+                {
+                    DoCast(SPELL_WARRIOR_SHOUT);
+                    Battleshout_timer = 120000;
+                }
+                else
+                    Battleshout_timer -= diff;
+
+                if (shout_timer <= diff)
+                {
+                    DoCast(SPELL_WARRIOR_SHOUT);
+                    shout_timer = 60000;
+                }
+                else
+                    shout_timer -= diff;
+
+                if (hamstring_timer <= diff)
+                {
+                    DoCast(SPELL_WARRIOR_HAMSTRING);
+                    hamstring_timer = urand(20000, 25000);
+                }
+                else
+                    hamstring_timer -= diff;
+
+                if (disarm_timer <= diff)
+                {
+                    DoCast(SPELL_WARRIOR_DISARM);
+                    disarm_timer = urand(50000, 60000);
+                }
+                else
+                    disarm_timer -= diff;
+
+                DoMeleeAttackIfReady();
+            }
+        };
+    };
+
 void AddSC_dalaran()
 {
     // our
@@ -597,6 +803,8 @@ void AddSC_dalaran()
     new npc_mei_francis_mount();
     new npc_shandy_dalaran();
     new npc_archmage_landalock();
+    new npc_dalaran_mage();
+    new npc_dalaran_warrior();
 
     // theirs
     new npc_mageguard_dalaran();

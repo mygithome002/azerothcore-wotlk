@@ -39,6 +39,10 @@
 #include "WorldSession.h"
 #include "Transport.h"
 
+ // Playerbot mod:
+#include "../../modules/bot/playerbot/playerbot.h"
+#include "../../modules/bot/playerbot/PlayerbotAIConfig.h"
+
 class LoginQueryHolder : public SQLQueryHolder
 {
     private:
@@ -51,6 +55,78 @@ class LoginQueryHolder : public SQLQueryHolder
         uint32 GetAccountId() const { return m_accountId; }
         bool Initialize();
 };
+
+// Playerbot mod:
+class PlayerbotLoginQueryHolder : public LoginQueryHolder
+{
+private:
+	uint32 masterAccountId;
+	PlayerbotHolder* playerbotHolder;
+
+public:
+	PlayerbotLoginQueryHolder(PlayerbotHolder* playerbotHolder, uint32 masterAccount, uint32 accountId, uint64 guid)
+		: LoginQueryHolder(accountId, guid), masterAccountId(masterAccount), playerbotHolder(playerbotHolder) { }
+
+public:
+	uint32 GetMasterAccountId() const { return masterAccountId; }
+	PlayerbotHolder* GetPlayerbotHolder() { return playerbotHolder; }
+};
+
+void PlayerbotHolder::AddPlayerBot(uint64 playerGuid, uint32 masterAccount)
+{
+	// has bot already been added?
+	Player* bot = ObjectAccessor::FindPlayer(playerGuid);
+
+	if (bot && bot->IsInWorld())
+		return;
+
+	uint32 accountId = sObjectMgr->GetPlayerAccountIdByGUID(playerGuid);
+	if (accountId == 0)
+		return;
+
+	PlayerbotLoginQueryHolder *holder = new PlayerbotLoginQueryHolder(this, masterAccount, accountId, playerGuid);
+	if (!holder->Initialize())
+	{
+		delete holder;                                      // delete all unprocessed queries
+		return;
+	}
+
+	QueryResultHolderFuture future = CharacterDatabase.DelayQueryHolder(holder);
+	SQLQueryHolder* param;
+	future.get(param);
+
+	WorldSession* masterSession = masterAccount ? sWorld->FindSession(masterAccount) : NULL;
+	uint32 botAccountId = holder->GetAccountId();
+	WorldSession *botSession = new WorldSession(botAccountId, NULL, SEC_PLAYER, 2, 0, LOCALE_enUS, 0, false, true);
+
+	botSession->HandlePlayerLoginFromDB(holder); // will delete lqh
+
+	bot = botSession->GetPlayer();
+	if (!bot)
+		return;
+
+	PlayerbotMgr *mgr = bot->GetPlayerbotMgr();
+	bot->SetPlayerbotMgr(NULL);
+	delete mgr;
+	sRandomPlayerbotMgr.OnPlayerLogin(bot);
+
+	bool allowed = false;
+	if (botAccountId == masterAccount)
+		allowed = true;
+	else if (masterSession && sPlayerbotAIConfig.allowGuildBots && bot->GetGuildId() == masterSession->GetPlayer()->GetGuildId())
+		allowed = true;
+	else if (sPlayerbotAIConfig.IsInRandomAccountList(botAccountId))
+		allowed = true;
+
+	if (allowed)
+		OnBotLogin(bot);
+	else if (masterSession)
+	{
+		ChatHandler ch(masterSession);
+		ch.PSendSysMessage("You are not allowed to control bot %s...", bot->GetName().c_str());
+		LogoutPlayerBot(bot->GetGUID());
+	}
+}
 
 bool LoginQueryHolder::Initialize()
 {
@@ -204,7 +280,9 @@ void WorldSession::HandleCharEnum(PreparedQueryResult result)
         do
         {
             uint32 guidlow = (*result)[0].GetUInt32();
-            ;//sLog->outDetail("Loading char guid %u from account %u.", guidlow, GetAccountId());
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+            sLog->outDetail("Loading char guid %u from account %u.", guidlow, GetAccountId());
+#endif
             if (Player::BuildEnumData(result, &data))
             {
                 _legitCharacters.insert(guidlow);
@@ -593,7 +671,9 @@ void WorldSession::HandleCharCreateCallback(PreparedQueryResult result, Characte
             {
                 uint8 unk;
                 createInfo->Data >> unk;
-                ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "Character creation %s (account %u) has unhandled tail data: [%u]", createInfo->Name.c_str(), GetAccountId(), unk);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+                sLog->outDebug(LOG_FILTER_NETWORKIO, "Character creation %s (account %u) has unhandled tail data: [%u]", createInfo->Name.c_str(), GetAccountId(), unk);
+#endif
             }
 
             // pussywizard:
@@ -651,7 +731,9 @@ void WorldSession::HandleCharCreateCallback(PreparedQueryResult result, Characte
             SendPacket(&data);
 
             std::string IP_str = GetRemoteAddress();
-            ;//sLog->outDetail("Account: %d (IP: %s) Create Character:[%s] (GUID: %u)", GetAccountId(), IP_str.c_str(), createInfo->Name.c_str(), newChar.GetGUIDLow());
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+            sLog->outDetail("Account: %d (IP: %s) Create Character:[%s] (GUID: %u)", GetAccountId(), IP_str.c_str(), createInfo->Name.c_str(), newChar.GetGUIDLow());
+#endif
             sLog->outChar("Account: %d (IP: %s) Create Character:[%s] (GUID: %u)", GetAccountId(), IP_str.c_str(), createInfo->Name.c_str(), newChar.GetGUIDLow());
             sScriptMgr->OnPlayerCreate(&newChar);
             sWorld->AddGlobalPlayerData(newChar.GetGUIDLow(), GetAccountId(), newChar.GetName(), newChar.getGender(), newChar.getRace(), newChar.getClass(), newChar.getLevel(), 0, 0);
@@ -710,7 +792,9 @@ void WorldSession::HandleCharDeleteOpcode(WorldPacket& recvData)
         return;
 
     std::string IP_str = GetRemoteAddress();
-    ;//sLog->outDetail("Account: %d (IP: %s) Delete Character:[%s] (GUID: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), GUID_LOPART(guid));
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDetail("Account: %d (IP: %s) Delete Character:[%s] (GUID: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), GUID_LOPART(guid));
+#endif
     sLog->outChar("Account: %d (IP: %s) Delete Character:[%s] (GUID: %u)", GetAccountId(), IP_str.c_str(), name.c_str(), GUID_LOPART(guid));
     sScriptMgr->OnPlayerDelete(guid);
 
@@ -916,13 +1000,17 @@ void WorldSession::HandlePlayerLoginFromDB(LoginQueryHolder* holder)
         data.put(0, linecount);
 
         SendPacket(&data);
-        ;//sLog->outStaticDebug("WORLD: Sent motd (SMSG_MOTD)");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outStaticDebug("WORLD: Sent motd (SMSG_MOTD)");
+#endif
 
         // send server info
         if (sWorld->getIntConfig(CONFIG_ENABLE_SINFO_LOGIN) == 1)
             chH.PSendSysMessage(_FULLVERSION);
 
-        ;//sLog->outStaticDebug("WORLD: Sent server info");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outStaticDebug("WORLD: Sent server info");
+#endif
     }
 
     if (uint32 guildId = Player::GetGuildIdFromStorage(pCurrChar->GetGUIDLow()))
@@ -1070,10 +1158,28 @@ void WorldSession::HandlePlayerLoginFromDB(LoginQueryHolder* holder)
         pCurrChar->resetTalents(true);
         pCurrChar->SendTalentsInfoData(false);              // original talents send already in to SendInitialPacketsBeforeAddToMap, resend reset state
         SendNotification(LANG_RESET_TALENTS);
-    }
-
-    if (pCurrChar->HasAtLoginFlag(AT_LOGIN_FIRST))
+    } 
+    
+    bool firstLogin = pCurrChar->HasAtLoginFlag(AT_LOGIN_FIRST);
+    int BattleStance = 2458;
+    int BloodPresence = 48266;
+    if (firstLogin)
+    {
         pCurrChar->RemoveAtLoginFlag(AT_LOGIN_FIRST);
+  
+        // Activate [Battle Stance] and [Blood Presence] at first login.
+        switch (pCurrChar->getClass())
+        {
+        case CLASS_WARRIOR:
+            pCurrChar->CastSpell(pCurrChar, BattleStance, true);
+            break;
+        case CLASS_DEATH_KNIGHT:
+            pCurrChar->CastSpell(pCurrChar, BloodPresence, true);
+            break;
+        default: // Other classes don't need it
+            break;
+        }
+    }
 
     if (pCurrChar->HasAtLoginFlag(AT_LOGIN_CHECK_ACHIEVS))
     {
@@ -1136,6 +1242,35 @@ void WorldSession::HandlePlayerLoginFromDB(LoginQueryHolder* holder)
     // Load pet if any (if player not alive and in taxi flight or another then pet will remember as temporary unsummoned)
     pCurrChar->LoadPet();
 
+    if (pCurrChar->GetSession()->GetRecruiterId() != 0 || pCurrChar->GetSession()->IsARecruiter())
+    {
+        bool isReferrer = pCurrChar->GetSession()->IsARecruiter();
+
+        for (SessionMap::const_iterator itr = sWorld->GetAllSessions().begin(); itr != sWorld->GetAllSessions().end(); ++itr)
+        {
+            if (!itr->second->GetRecruiterId() && !itr->second->IsARecruiter())
+                continue;
+            if ((isReferrer && pCurrChar->GetSession()->GetAccountId() == itr->second->GetRecruiterId()) || (!isReferrer && pCurrChar->GetSession()->GetRecruiterId() == itr->second->GetAccountId()))
+            {
+                Player * rf = itr->second->GetPlayer();
+                if (rf != NULL)
+                {
+                    pCurrChar->SendUpdateToPlayer(rf);
+                    rf->SendUpdateToPlayer(pCurrChar);
+                }
+            }
+        }
+    }
+
+	// playerbot mod
+	if (_player && !_player->GetPlayerbotAI())
+	{
+		_player->SetPlayerbotMgr(new PlayerbotMgr(_player));
+		_player->GetPlayerbotMgr()->OnPlayerLogin(_player);
+	}
+
+	sRandomPlayerbotMgr.OnPlayerLogin(_player);
+
     sScriptMgr->OnPlayerLogin(pCurrChar);
     delete holder;
 }
@@ -1191,13 +1326,17 @@ void WorldSession::HandlePlayerLoginToCharInWorld(Player* pCurrChar)
         data.put(0, linecount);
 
         SendPacket(&data);
-        ;//sLog->outStaticDebug("WORLD: Sent motd (SMSG_MOTD)");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outStaticDebug("WORLD: Sent motd (SMSG_MOTD)");
+#endif
 
         // send server info
         if (sWorld->getIntConfig(CONFIG_ENABLE_SINFO_LOGIN) == 1)
             chH.PSendSysMessage(_FULLVERSION);
 
-        ;//sLog->outStaticDebug("WORLD: Sent server info");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outStaticDebug("WORLD: Sent server info");
+#endif
     }
 
     data.Initialize(SMSG_LEARNED_DANCE_MOVES, 4+4);
@@ -1289,14 +1428,16 @@ void WorldSession::HandlePlayerLoginToCharInWorld(Player* pCurrChar)
     m_playerLoading = false;
 }
 
-void WorldSession::HandlePlayerLoginToCharOutOfWorld(Player* pCurrChar)
+void WorldSession::HandlePlayerLoginToCharOutOfWorld(Player*  /*pCurrChar*/)
 {
     ASSERT(false);
 }
 
 void WorldSession::HandleSetFactionAtWar(WorldPacket& recvData)
 {
-    ;//sLog->outStaticDebug("WORLD: Received CMSG_SET_FACTION_ATWAR");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("WORLD: Received CMSG_SET_FACTION_ATWAR");
+#endif
 
     uint32 repListID;
     uint8  flag;
@@ -1344,7 +1485,9 @@ void WorldSession::HandleTutorialReset(WorldPacket & /*recvData*/)
 
 void WorldSession::HandleSetWatchedFactionOpcode(WorldPacket& recvData)
 {
-    ;//sLog->outStaticDebug("WORLD: Received CMSG_SET_WATCHED_FACTION");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("WORLD: Received CMSG_SET_WATCHED_FACTION");
+#endif
     uint32 fact;
     recvData >> fact;
     GetPlayer()->SetUInt32Value(PLAYER_FIELD_WATCHED_FACTION_INDEX, fact);
@@ -1352,7 +1495,9 @@ void WorldSession::HandleSetWatchedFactionOpcode(WorldPacket& recvData)
 
 void WorldSession::HandleSetFactionInactiveOpcode(WorldPacket & recvData)
 {
-    ;//sLog->outStaticDebug("WORLD: Received CMSG_SET_FACTION_INACTIVE");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("WORLD: Received CMSG_SET_FACTION_INACTIVE");
+#endif
     uint32 replistid;
     uint8 inactive;
     recvData >> replistid >> inactive;
@@ -1362,14 +1507,18 @@ void WorldSession::HandleSetFactionInactiveOpcode(WorldPacket & recvData)
 
 void WorldSession::HandleShowingHelmOpcode(WorldPacket& recvData)
 {
-    ;//sLog->outStaticDebug("CMSG_SHOWING_HELM for %s", _player->GetName().c_str());
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("CMSG_SHOWING_HELM for %s", _player->GetName().c_str());
+#endif
     recvData.read_skip<uint8>(); // unknown, bool?
     _player->ToggleFlag(PLAYER_FLAGS, PLAYER_FLAGS_HIDE_HELM);
 }
 
 void WorldSession::HandleShowingCloakOpcode(WorldPacket& recvData)
 {
-    ;//sLog->outStaticDebug("CMSG_SHOWING_CLOAK for %s", _player->GetName().c_str());
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("CMSG_SHOWING_CLOAK for %s", _player->GetName().c_str());
+#endif
     recvData.read_skip<uint8>(); // unknown, bool?
     _player->ToggleFlag(PLAYER_FLAGS, PLAYER_FLAGS_HIDE_CLOAK);
 }
@@ -1587,7 +1736,9 @@ void WorldSession::HandleSetPlayerDeclinedNames(WorldPacket& recvData)
 
 void WorldSession::HandleAlterAppearance(WorldPacket& recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_ALTER_APPEARANCE");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_ALTER_APPEARANCE");
+#endif
 
     uint32 Hair, Color, FacialHair, SkinColor;
     recvData >> Hair >> Color >> FacialHair >> SkinColor;
@@ -1664,7 +1815,9 @@ void WorldSession::HandleRemoveGlyph(WorldPacket& recvData)
 
     if (slot >= MAX_GLYPH_SLOT_INDEX)
     {
-        ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "Client sent wrong glyph slot number in opcode CMSG_REMOVE_GLYPH %u", slot);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outDebug(LOG_FILTER_NETWORKIO, "Client sent wrong glyph slot number in opcode CMSG_REMOVE_GLYPH %u", slot);
+#endif
         return;
     }
 
@@ -1824,7 +1977,9 @@ void WorldSession::HandleCharCustomize(WorldPacket& recvData)
 
 void WorldSession::HandleEquipmentSetSave(WorldPacket &recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_EQUIPMENT_SET_SAVE");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_EQUIPMENT_SET_SAVE");
+#endif
 
     uint64 setGuid;
     recvData.readPackGUID(setGuid);
@@ -1883,7 +2038,9 @@ void WorldSession::HandleEquipmentSetSave(WorldPacket &recvData)
 
 void WorldSession::HandleEquipmentSetDelete(WorldPacket &recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_EQUIPMENT_SET_DELETE");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_EQUIPMENT_SET_DELETE");
+#endif
 
     uint64 setGuid;
     recvData.readPackGUID(setGuid);
@@ -1893,7 +2050,9 @@ void WorldSession::HandleEquipmentSetDelete(WorldPacket &recvData)
 
 void WorldSession::HandleEquipmentSetUse(WorldPacket &recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_EQUIPMENT_SET_USE");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_EQUIPMENT_SET_USE");
+#endif
 
     for (uint32 i = 0; i < EQUIPMENT_SLOT_END; ++i)
     {
@@ -1903,7 +2062,9 @@ void WorldSession::HandleEquipmentSetUse(WorldPacket &recvData)
         uint8 srcbag, srcslot;
         recvData >> srcbag >> srcslot;
 
-        ;//sLog->outDebug(LOG_FILTER_PLAYER_ITEMS, "Item " UI64FMTD ": srcbag %u, srcslot %u", itemGuid, srcbag, srcslot);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outDebug(LOG_FILTER_PLAYER_ITEMS, "Item " UI64FMTD ": srcbag %u, srcslot %u", itemGuid, srcbag, srcslot);
+#endif
 
         // check if item slot is set to "ignored" (raw value == 1), must not be unequipped then
         if (itemGuid == 1)
@@ -1918,30 +2079,50 @@ void WorldSession::HandleEquipmentSetUse(WorldPacket &recvData)
             item = _player->GetItemByGuid(itemGuid);
 
         uint16 dstpos = i | (INVENTORY_SLOT_BAG_0 << 8);
+        
+        InventoryResult msg;
 
-        if (!item)
-        {
-            Item* uItem = _player->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
-            if (!uItem)
-                continue;
-
-            ItemPosCountVec sDest;
-            InventoryResult msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, sDest, uItem, false);
-            if (msg == EQUIP_ERR_OK)
-            {
-                _player->RemoveItem(INVENTORY_SLOT_BAG_0, i, true);
-                _player->StoreItem(sDest, uItem, true);
+        Item* uItem = _player->GetItemByPos(INVENTORY_SLOT_BAG_0, i);
+        if (uItem) {
+            if (uItem->IsEquipped()) {
+                msg = _player->CanUnequipItem(dstpos, true);
+                if (msg != EQUIP_ERR_OK) {
+                    _player->SendEquipError(msg, uItem, NULL);
+                    continue;
+                }
             }
-            else
-                _player->SendEquipError(msg, uItem, NULL);
 
-            continue;
+            if (!item)
+            {
+                ItemPosCountVec sDest;
+                msg = _player->CanStoreItem(NULL_BAG, NULL_SLOT, sDest, uItem, false);
+                if (msg == EQUIP_ERR_OK)
+                {
+                    _player->RemoveItem(INVENTORY_SLOT_BAG_0, i, true);
+                    _player->StoreItem(sDest, uItem, true);
+                }
+                else
+                    _player->SendEquipError(msg, uItem, NULL);
+
+                continue;
+            }
         }
 
-        if (item->GetPos() == dstpos)
-            continue;
+        if (item) {
+            if (item->GetPos() == dstpos)
+                continue;
 
-        _player->SwapItem(item->GetPos(), dstpos);
+            if (!item->IsEquipped()) {
+                uint16 _candidatePos;
+                msg = _player->CanEquipItem(NULL_SLOT, _candidatePos, item, true);
+                if (msg != EQUIP_ERR_OK) {
+                    _player->SendEquipError(msg, item, NULL);
+                    continue;
+                }
+            }
+
+            _player->SwapItem(item->GetPos(), dstpos);
+        }
     }
 
     WorldPacket data(SMSG_EQUIPMENT_SET_USE_RESULT, 1);
@@ -2073,8 +2254,8 @@ void WorldSession::HandleCharFactionOrRaceChange(WorldPacket& recvData)
 
     // xinef: check money
     bool valid = Player::TeamIdForRace(oldRace) == Player::TeamIdForRace(race);
-    if (level < 10 && money <= 0 || level > 10 && level <= 30 && money <= 3000000 || level > 30 && level <= 50 && money <= 10000000 ||
-        level > 50 && level <= 70 && money <= 50000000 || level > 70 && money <= 200000000)
+    if ((level < 10 && money <= 0) || (level > 10 && level <= 30 && money <= 3000000 ) || (level > 30 && level <= 50 && money <= 10000000) ||
+        (level > 50 && level <= 70 && money <= 50000000) || (level > 70 && money <= 200000000))
         valid = true;
     if (!valid)
     {

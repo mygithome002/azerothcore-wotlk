@@ -63,6 +63,10 @@ function import() {
                 echo "DELIMITER //"  >> "$newFile";
                 echo "CREATE PROCEDURE updateDb ()" >> "$newFile";
                 echo "proc:BEGIN DECLARE OK VARCHAR(100) DEFAULT 'FALSE';" >> "$newFile";
+                echo "SELECT COUNT(*) INTO @COLEXISTS"  >> "$newFile";
+                echo "FROM information_schema.COLUMNS" >> "$newFile";
+                echo "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'version_db_"$db"' AND COLUMN_NAME = '"$oldVer"';" >> "$newFile";
+                echo "IF @COLEXISTS = 0 THEN LEAVE proc; END IF;" >> "$newFile";
             fi
 
             echo "$startTransaction" >> "$newFile";
@@ -75,9 +79,11 @@ function import() {
             echo "--" >> "$newFile";
             echo "-- START UPDATING QUERIES" >> "$newFile";
             echo "--" >> "$newFile";
+            echo "" >> "$newFile";
 
             cat $entry >> "$newFile";
 
+            echo "" >> "$newFile";
             echo "--" >> "$newFile";
             echo "-- END UPDATING QUERIES" >> "$newFile";
             echo "--" >> "$newFile";
@@ -85,8 +91,7 @@ function import() {
             echo "$endTransaction" >> "$newFile";
 
             if [[ $isRev -eq 1 ]]; then
-                echo "END;" >> "$newFile";
-                echo "//" >> "$newFile";
+                echo "END //" >> "$newFile";
                 echo "DELIMITER ;" >> "$newFile";
                 echo "CALL updateDb();" >> "$newFile";
                 echo "DROP PROCEDURE IF EXISTS \`updateDb\`;" >> "$newFile";

@@ -61,8 +61,8 @@ struct TempSummonGroupKey
 
     bool operator<(TempSummonGroupKey const& rhs) const
     {
-        // memcmp is only reliable if struct doesn't have any padding (packed)
-        return memcmp(this, &rhs, sizeof(TempSummonGroupKey)) < 0;
+        return std::tie(_summonerEntry, _summonerType, _summonGroup) <
+            std::tie(rhs._summonerEntry, rhs._summonerType, rhs._summonGroup);
     }
 
 private:
@@ -488,12 +488,14 @@ typedef std::pair<QuestRelations::const_iterator, QuestRelations::const_iterator
 
 struct PetLevelInfo
 {
-    PetLevelInfo() : health(0), mana(0), armor(0) { for (uint8 i=0; i < MAX_STATS; ++i) stats[i] = 0; }
+    PetLevelInfo() : health(0), mana(0), armor(0), min_dmg(0), max_dmg(0) { for (uint8 i=0; i < MAX_STATS; ++i) stats[i] = 0; }
 
     uint16 stats[MAX_STATS];
     uint16 health;
     uint16 mana;
-    uint16 armor;
+    uint32 armor;
+    uint16 min_dmg;
+    uint16 max_dmg;
 };
 
 struct MailLevelReward
@@ -681,6 +683,25 @@ class ObjectMgr
 
         typedef UNORDERED_MAP<uint32, Quest*> QuestMap;
 
+		// EJ objects 	
+		QuestMap mClassSpellQuestTemplates;
+		std::unordered_map<uint32, uint32> mTamableBeastsEntryStore;
+		// inventory type, sub class, required level, seq index
+		std::unordered_map<uint32, std::unordered_map<uint32, std::unordered_map<uint32, std::unordered_map<uint32, uint32>>>> mCategorizedEquipmentEntryStore;
+
+		QuestMap const& GetClassSpellQuestTemplates() const
+		{
+			return mClassSpellQuestTemplates;
+		}
+		std::unordered_map<uint32, uint32> GetTamableBeastsEntryStore() const
+		{
+			return mTamableBeastsEntryStore;
+		}
+		std::unordered_map<uint32, std::unordered_map<uint32, std::unordered_map<uint32, std::unordered_map<uint32, uint32>>>> GetCategorizedEquipmentEntryStore()
+		{
+			return mCategorizedEquipmentEntryStore;
+		}
+
         typedef UNORDERED_MAP<uint32, AreaTrigger> AreaTriggerContainer;
 
         typedef UNORDERED_MAP<uint32, uint32> AreaTriggerScriptContainer;
@@ -753,6 +774,24 @@ class ObjectMgr
         uint32 GetNearestTaxiNode(float x, float y, float z, uint32 mapid, uint32 teamId);
         void GetTaxiPath(uint32 source, uint32 destination, uint32 &path, uint32 &cost);
         uint32 GetTaxiMountDisplayId(uint32 id, TeamId teamId, bool allowed_alt_team = false);
+
+        GameObjectQuestItemList const* GetGameObjectQuestItemList(uint32 id) const
+        {
+            GameObjectQuestItemMap::const_iterator itr = _gameObjectQuestItemStore.find(id);
+            if (itr != _gameObjectQuestItemStore.end())
+                return &itr->second;
+            return NULL;
+        }
+        GameObjectQuestItemMap const* GetGameObjectQuestItemMap() const { return &_gameObjectQuestItemStore; }
+
+        CreatureQuestItemList const* GetCreatureQuestItemList(uint32 id) const
+        {
+            CreatureQuestItemMap::const_iterator itr = _creatureQuestItemStore.find(id);
+            if (itr != _creatureQuestItemStore.end())
+                return &itr->second;
+            return NULL;
+        }
+        CreatureQuestItemMap const* GetCreatureQuestItemMap() const { return &_creatureQuestItemStore; }
 
         Quest const* GetQuestTemplate(uint32 quest_id) const
         {
@@ -934,6 +973,8 @@ class ObjectMgr
         void LoadCreatureTemplates();
         void LoadCreatureTemplateAddons();
         void CheckCreatureTemplate(CreatureTemplate const* cInfo);
+        void LoadGameObjectQuestItems();
+        void LoadCreatureQuestItems();
         void LoadTempSummons();
         void LoadCreatures();
         void LoadLinkedRespawn();
@@ -1132,10 +1173,28 @@ class ObjectMgr
             if (itr == _pageTextLocaleStore.end()) return NULL;
             return &itr->second;
         }
+        QuestLocale const* GetQuestLocale(uint32 entry) const
+        {
+            QuestLocaleContainer::const_iterator itr = _questLocaleStore.find(entry);
+            if (itr == _questLocaleStore.end()) return NULL;
+            return &itr->second;
+        }
+        GossipMenuItemsLocale const* GetGossipMenuItemsLocale(uint32 entry) const
+        {
+            GossipMenuItemsLocaleContainer::const_iterator itr = _gossipMenuItemsLocaleStore.find(entry);
+            if (itr == _gossipMenuItemsLocaleStore.end()) return NULL;
+            return &itr->second;
+        }
         PointOfInterestLocale const* GetPointOfInterestLocale(uint32 poi_id) const
         {
             PointOfInterestLocaleContainer::const_iterator itr = _pointOfInterestLocaleStore.find(poi_id);
             if (itr == _pointOfInterestLocaleStore.end()) return NULL;
+            return &itr->second;
+        }
+        NpcTextLocale const* GetNpcTextLocale(uint32 entry) const
+        {
+            NpcTextLocaleContainer::const_iterator itr = _npcTextLocaleStore.find(entry);
+            if (itr == _npcTextLocaleStore.end()) return NULL;
             return &itr->second;
         }
         GameObjectData& NewGOData(uint32 guid) { return _gameObjectDataStore[guid]; }
@@ -1377,6 +1436,8 @@ class ObjectMgr
         CreatureAddonContainer _creatureAddonStore;
         CreatureAddonContainer _creatureTemplateAddonStore;
         GameObjectAddonContainer _gameObjectAddonStore;
+        GameObjectQuestItemMap _gameObjectQuestItemStore;
+        CreatureQuestItemMap _creatureQuestItemStore;
         EquipmentInfoContainer _equipmentInfoStore;
         LinkedRespawnContainer _linkedRespawnStore;
         CreatureLocaleContainer _creatureLocaleStore;

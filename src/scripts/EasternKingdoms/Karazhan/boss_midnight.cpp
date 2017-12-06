@@ -5,6 +5,7 @@
 #include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellInfo.h"
+#include "SpellScript.h"
 #include "karazhan.h"
 
 enum eSay
@@ -72,7 +73,7 @@ class boss_midnight : public CreatureScript
 
         struct boss_midnightAI : public BossAI
         {
-            boss_midnightAI(Creature* creature) : BossAI(creature, TYPE_ATTUMEN) { }
+            boss_midnightAI(Creature* creature) : BossAI(creature, DATA_ATTUMEN) { }
 
             void Reset()
             {
@@ -86,6 +87,7 @@ class boss_midnight : public CreatureScript
                 BossAI::EnterCombat(who);
                 events.ScheduleEvent(EVENT_CHECK_HEALTH_95, 0);
                 events.ScheduleEvent(EVENT_SPELL_KNOCKDOWN, 6000);
+                DoZoneInCombat();
             }
 
             void KilledUnit(Unit* /*victim*/)
@@ -222,7 +224,7 @@ class boss_attumen : public CreatureScript
                 }
             }
 
-            void SpellHit(Unit* caster, const SpellInfo* spellInfo)
+            void SpellHit(Unit*  /*caster*/, const SpellInfo* spellInfo)
             {
                 if (spellInfo->Mechanic == MECHANIC_DISARM && _events.GetNextEventTime(EVENT_KILL_TALK) == 0)
                 {
@@ -340,7 +342,7 @@ class boss_attumen_midnight : public CreatureScript
                 Talk(SAY_ATTUMEN2_DEATH);
             }
 
-            void SpellHit(Unit* caster, const SpellInfo* spellInfo)
+            void SpellHit(Unit*  /*caster*/, const SpellInfo* spellInfo)
             {
                 if (spellInfo->Mechanic == MECHANIC_DISARM && _events.GetNextEventTime(EVENT_KILL_TALK) == 0)
                 {
@@ -448,4 +450,5 @@ void AddSC_boss_attumen()
     new boss_midnight();
     new boss_attumen();
     new boss_attumen_midnight();
+    new spell_midnight_fixate();
 }

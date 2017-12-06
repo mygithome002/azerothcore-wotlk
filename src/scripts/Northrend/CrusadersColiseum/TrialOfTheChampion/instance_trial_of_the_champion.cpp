@@ -51,6 +51,7 @@ public:
         uint64 NPC_BlackKnightVehicleGUID;
         uint64 NPC_BlackKnightGUID;
         uint64 GO_MainGateGUID;
+		uint64 GO_EnterGateGUID;
 
         void Initialize()
         {
@@ -78,6 +79,7 @@ public:
             NPC_BlackKnightVehicleGUID = 0;
             NPC_BlackKnightGUID = 0;
             GO_MainGateGUID = 0;
+			GO_EnterGateGUID = 0;
         }
 
         bool IsEncounterInProgress() const
@@ -195,6 +197,10 @@ public:
                 case GO_EAST_PORTCULLIS:
                     HandleGameObject(go->GetGUID(), false, go);
                     break;
+                case GO_NORTH_PORTCULLIS:
+                    HandleGameObject(go->GetGUID(), true, go);
+					GO_EnterGateGUID = go->GetGUID();
+                     break;
             }
         }
 
@@ -417,6 +423,7 @@ public:
             }
 
             HandleGameObject(GO_MainGateGUID, false);
+			HandleGameObject(GO_EnterGateGUID, true);
             Counter = 0;
             SaveToDB();
             events.Reset();
@@ -503,6 +510,7 @@ public:
                                 else
                                     announcer->AI()->Talk(TEXT_INTRODUCE_PALETRESS);
                             }
+							HandleGameObject(GO_EnterGateGUID, false);
                             events.RescheduleEvent(EVENT_START_ARGENT_CHALLENGE_INTRO, 0);
                             break;
                         case INSTANCE_PROGRESS_ARGENT_CHALLENGE_DIED:
@@ -627,6 +635,7 @@ public:
                         m_auiEncounter[1] = uiData;
                         if( uiData == DONE )
                         {
+							HandleGameObject(GO_EnterGateGUID, true);
                             InstanceProgress = INSTANCE_PROGRESS_ARGENT_CHALLENGE_DIED;
                             events.ScheduleEvent(EVENT_ARGENT_CHALLENGE_RUN_MIDDLE, 0);
                         }
@@ -644,8 +653,12 @@ public:
                     {
                         m_auiEncounter[2] = uiData;
                         if (uiData == NOT_STARTED)
+						{ 
                             bAchievIveHadWorse = true;
+						    HandleGameObject(GO_EnterGateGUID, false);
+						}
                         else if( uiData == DONE )
+							HandleGameObject(GO_EnterGateGUID, true);
                             InstanceProgress = INSTANCE_PROGRESS_FINISHED;
                     }
                     break;
@@ -802,6 +815,7 @@ public:
                             announcer->SetFacingTo(4.714f);
                             if( Creature* tirion = instance->GetCreature(NPC_TirionGUID) )
                                 tirion->AI()->Talk(TEXT_BEGIN);
+							HandleGameObject(GO_EnterGateGUID, false);
                         }
                         for( uint8 i=0; i<3; ++i )
                             if( Creature* c = instance->GetCreature(NPC_GrandChampionMinionsGUID[1][i]) )
@@ -955,6 +969,7 @@ public:
                         if( Creature* tirion = instance->GetCreature(NPC_TirionGUID) )
                             tirion->AI()->Talk(TEXT_GRATZ_SLAIN_CHAMPIONS);
                         events.PopEvent();
+						HandleGameObject(GO_EnterGateGUID, true);
                     }
                     break;
                 case EVENT_RESTORE_ANNOUNCER_GOSSIP:
@@ -972,6 +987,7 @@ public:
                             {
                                 announcer->SetFacingToObject(gate);
                                 HandleGameObject(GO_MainGateGUID, true, gate);
+								HandleGameObject(GO_EnterGateGUID, false, gate);
                             }
                             if( Counter )
                             {
@@ -1017,7 +1033,7 @@ public:
                     {
                         if( Creature* announcer = instance->GetCreature(NPC_AnnouncerGUID) )
                             announcer->GetMotionMaster()->MovePoint(0, 735.81f, 661.92f, 412.39f);
-                        if( Creature* boss = instance->SummonCreature(Counter ? NPC_EADRIC : NPC_PALETRESS, SpawnPosition) )
+                        if (Creature* boss = instance->SummonCreature(Counter ? NPC_EADRIC : NPC_PALETRESS, SpawnPosition))
                             boss->GetMotionMaster()->MovePoint(0, 746.881f, 660.263f, 411.7f);
                         events.ScheduleEvent(EVENT_CLOSE_GATE, 5000);
                         events.ScheduleEvent(EVENT_ARGENT_CHALLENGE_SAY_1, 4000);
@@ -1059,8 +1075,8 @@ public:
                     break;
                 case EVENT_ARGENT_CHALLENGE_MOVE_FORWARD:
                     {
-                        if( Creature* boss = instance->GetCreature(NPC_ArgentChampionGUID) )
-                            boss->GetMotionMaster()->MovePoint(0, 746.881f, 635.263f, 411.7f);
+                    if (Creature* boss = instance->GetCreature(NPC_ArgentChampionGUID))
+                        boss->GetMotionMaster()->MovePoint(0, 746.881f, 635.263f, 411.7f);
                         events.ScheduleEvent(EVENT_ARGENT_CHALLENGE_ATTACK, 3000);
                         events.PopEvent();
                     }
@@ -1225,7 +1241,7 @@ public:
             }           
         }
 
-        bool CheckAchievementCriteriaMeet(uint32 criteria_id, Player const* source, Unit const* target = NULL, uint32 miscvalue1 = 0)
+        bool CheckAchievementCriteriaMeet(uint32 criteria_id, Player const*  /*source*/, Unit const*  /*target*/, uint32  /*miscvalue1*/)
         {
             switch(criteria_id)
             {

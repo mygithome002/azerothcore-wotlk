@@ -30,6 +30,9 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
     if (owner->HasUnitState(UNIT_STATE_NOT_MOVE))
         return;
 
+    if (owner->HasUnitState(UNIT_STATE_CASTING) && !owner->CanMoveDuringChannel())
+        return;
+
     float x, y, z;
     bool isPlayerPet = owner->IsPet() && IS_PLAYER_GUID(owner->GetOwnerGUID());
     bool sameTransport = owner->GetTransport() && owner->GetTransport() ==  i_target->GetTransport();
@@ -44,11 +47,17 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
                      (i_target->GetTypeId() == TYPEID_PLAYER && i_target->ToPlayer()->IsGameMaster()); // for .npc follow
     bool forcePoint = ((!isPlayerPet || owner->GetMapId() == 618) && (forceDest || !useMMaps)) || sameTransport;
 
+    if (owner->GetTypeId() == TYPEID_UNIT && !i_target->isInAccessiblePlaceFor(owner->ToCreature()) && !sameTransport && !forceDest && !forcePoint)
+        return;
+
     lastOwnerXYZ.Relocate(owner->GetPositionX(), owner->GetPositionY(), owner->GetPositionZ());
     lastTargetXYZ.Relocate(i_target->GetPositionX(), i_target->GetPositionY(), i_target->GetPositionZ());
 
     if (!i_offset)
     {
+        if (i_target->IsWithinDistInMap(owner, CONTACT_DISTANCE))
+            return;
+
         float allowedRange = MELEE_RANGE;
         if ((!initial || (owner->movespline->Finalized() && this->GetMovementGeneratorType() == CHASE_MOTION_TYPE)) && i_target->IsWithinMeleeRange(owner, allowedRange) && i_target->IsWithinLOS(owner->GetPositionX(), owner->GetPositionY(), owner->GetPositionZ()))
             return;
@@ -60,6 +69,9 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
             owner->m_targetsNotAcceptable[i_target->GetGUID()] = MMapTargetData(sWorld->GetGameTime()+DISALLOW_TIME_AFTER_FAIL, owner, i_target.getTarget());
             return;
         }
+
+        // to nearest contact position
+        i_target->GetContactPoint(owner, x, y, z);
     }
     else
     {
@@ -121,7 +133,7 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
                         Position dest = {x, y, z, 0.0f};
                         if (GameObject* pillar = ((BattlegroundRV*)bg)->GetPillarAtPosition(&dest))
                         {
-                            if (pillar->GetGoState() == GO_STATE_READY && pillar->ToTransport()->GetPathProgress() == 0 || owner->GetPositionZ() > 31.0f || owner->GetTransGUID() == pillar->GetGUID())
+                            if ((pillar->GetGoState() == GO_STATE_READY && pillar->ToTransport()->GetPathProgress() == 0) || owner->GetPositionZ() > 31.0f || owner->GetTransGUID() == pillar->GetGUID())
                             {
                                 if (pillar->GetGoState() == GO_STATE_READY && pillar->ToTransport()->GetPathProgress() == 0)
                                     z = std::max(z, 28.28f);
@@ -135,7 +147,7 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
                                 init.Launch();
                                 return;
                             }
-                            if (pillar->GetGoState() == GO_STATE_ACTIVE || pillar->GetGoState() == GO_STATE_READY && pillar->ToTransport()->GetPathProgress() > 0)
+                            if (pillar->GetGoState() == GO_STATE_ACTIVE || (pillar->GetGoState() == GO_STATE_READY && pillar->ToTransport()->GetPathProgress() > 0))
                             {
                                 Position pos;
                                 owner->GetFirstCollisionPositionForTotem(pos, owner->GetExactDist2d(i_target.getTarget()), owner->GetAngle(i_target.getTarget())-owner->GetOrientation(), false);
@@ -158,7 +170,7 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
         if (result)
         {
             float maxDist = MELEE_RANGE + owner->GetMeleeReach() + i_target->GetMeleeReach();
-            if (!forceDest && (i_path->GetPathType() & PATHFIND_NOPATH || !i_offset && !isPlayerPet && i_target->GetExactDistSq(i_path->GetActualEndPosition().x, i_path->GetActualEndPosition().y, i_path->GetActualEndPosition().z) > maxDist*maxDist))
+            if (!forceDest && (i_path->GetPathType() & PATHFIND_NOPATH || (!i_offset && !isPlayerPet && i_target->GetExactDistSq(i_path->GetActualEndPosition().x, i_path->GetActualEndPosition().y, i_path->GetActualEndPosition().z) > maxDist*maxDist)))
             {
                 lastPathingFailMSTime = World::GetGameTimeMS();
                 owner->m_targetsNotAcceptable[i_target->GetGUID()] = MMapTargetData(sWorld->GetGameTime()+DISALLOW_TIME_AFTER_FAIL, owner, i_target.getTarget());
@@ -167,6 +179,7 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
             else
             {
                 owner->m_targetsNotAcceptable.erase(i_target->GetGUID());
+                owner->AddUnitState(UNIT_STATE_CHASE);
 
                 init.MovebyPath(i_path->GetPath());
                 if (i_angle == 0.f)
@@ -179,6 +192,8 @@ void TargetedMovementGeneratorMedium<T,D>::_setTargetLocation(T* owner, bool ini
 
         // if failed to generate, just use normal MoveTo
     }
+
+    owner->AddUnitState(UNIT_STATE_CHASE);
 
     init.MoveTo(x,y,z);
     // Using the same condition for facing target as the one that is used for SetInFront on movement end
@@ -206,7 +221,7 @@ bool TargetedMovementGeneratorMedium<T,D>::DoUpdate(T* owner, uint32 time_diff)
     }
 
     // prevent movement while casting spells with cast time or channel time
-    if (owner->HasUnitState(UNIT_STATE_CASTING))
+    if (owner->HasUnitState(UNIT_STATE_CASTING) && !owner->CanMoveDuringChannel())
     {
         bool stop = true;
         if (Spell* spell = owner->GetCurrentSpell(CURRENT_CHANNELED_SPELL))

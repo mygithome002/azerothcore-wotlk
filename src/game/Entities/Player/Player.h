@@ -43,6 +43,10 @@ class PlayerSocial;
 class SpellCastTargets;
 class UpdateMask;
 
+// Playerbot mod
+class PlayerbotAI;
+class PlayerbotMgr;
+
 typedef std::deque<Mail*> PlayerMails;
 
 #define PLAYER_MAX_SKILLS           127
@@ -1075,6 +1079,21 @@ private:
     bool _isPvP;
 };
 
+/* World of Warcraft Armory */
+struct WowarmoryFeedEntry 
+{
+	uint32 guid;         // Player GUID
+	time_t date;         // Log date
+	uint32 type;         // TYPE_ACHIEVEMENT_FEED, TYPE_ITEM_FEED, TYPE_BOSS_FEED
+	uint32 data;         // TYPE_ITEM_FEED: item_entry, TYPE_BOSS_FEED: creature_entry
+	uint32 item_guid;    // Can be 0
+	uint32 item_quality; // Can be 0
+	uint8  difficulty;   // Can be 0
+	int    counter;      // Can be 0
+};
+
+typedef std::vector<WowarmoryFeedEntry> WowarmoryFeeds;
+
 class Player : public Unit, public GridObject<Player>
 {
     friend class WorldSession;
@@ -1096,10 +1115,10 @@ class Player : public Unit, public GridObject<Player>
             SetFloatValue(UNIT_FIELD_COMBATREACH, scale * DEFAULT_COMBAT_REACH);
         }
 
-        bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0);
-        bool TeleportTo(WorldLocation const &loc, uint32 options = 0)
+        bool TeleportTo(uint32 mapid, float x, float y, float z, float orientation, uint32 options = 0, Unit *target = nullptr);
+        bool TeleportTo(WorldLocation const &loc, uint32 options = 0, Unit *target = nullptr)
         {
-            return TeleportTo(loc.GetMapId(), loc.GetPositionX(), loc.GetPositionY(), loc.GetPositionZ(), loc.GetOrientation(), options);
+            return TeleportTo(loc.GetMapId(), loc.GetPositionX(), loc.GetPositionY(), loc.GetPositionZ(), loc.GetOrientation(), options, target);
         }
         bool TeleportToEntryPoint();
 
@@ -1114,10 +1133,13 @@ class Player : public Unit, public GridObject<Player>
         }
         bool IsSummonAsSpectator() const { return m_summon_asSpectator && m_summon_expire >= time(NULL); }
         void SetSummonAsSpectator(bool on) { m_summon_asSpectator = on; }
-        void SummonIfPossible(bool agree);
+        void SummonIfPossible(bool agree, uint32 summoner_guid);
         time_t GetSummonExpireTimer() const { return m_summon_expire; }
 
         bool Create(uint32 guidlow, CharacterCreateInfo* createInfo);
+
+		// playerbot mod
+		bool CreateBot(uint32 guidlow, BotCharacterCreateInfo* createInfo);
 
         void Update(uint32 time);
 
@@ -2388,7 +2410,11 @@ class Player : public Unit, public GridObject<Player>
 
         void SendCinematicStart(uint32 CinematicSequenceId);
         void SendMovieStart(uint32 MovieId);
-
+		
+		/* World of Warcraft Armory */
+		void CreateWowarmoryFeed(uint32 type, uint32 data, uint32 item_guid, uint32 item_quality);
+		void InitWowarmoryFeeds();
+		
         /*********************************************************/
         /***                 INSTANCE SYSTEM                   ***/
         /*********************************************************/
@@ -2515,6 +2541,18 @@ class Player : public Unit, public GridObject<Player>
         bool SetHover(bool enable, bool packetOnly = false);
 
         bool CanFly() const { return m_movementInfo.HasMovementFlag(MOVEMENTFLAG_CAN_FLY); }
+
+		// Playerbot mod:
+		// A Player can either have a playerbotMgr (to manage its bots), or have playerbotAI (if it is a bot), or
+		// neither. Code that enables bots must create the playerbotMgr and set it using SetPlayerbotMgr.
+		EquipmentSets& GetEquipmentSets() { return m_EquipmentSets; }
+		void SetPlayerbotAI(PlayerbotAI* ai) { m_playerbotAI = ai; }
+		PlayerbotAI* GetPlayerbotAI() { return m_playerbotAI; }
+		void SetPlayerbotMgr(PlayerbotMgr* mgr) { m_playerbotMgr = mgr; }
+		PlayerbotMgr* GetPlayerbotMgr() { return m_playerbotMgr; }
+		void SetBotDeathTimer() { m_deathTimer = 0; }
+		PlayerTalentMap& GetTalentMap(uint8 spec) { return m_talents; }
+		bool MinimalLoadFromDB(QueryResult result, uint32 guid);
 
         //! Return collision height sent to client
         float GetCollisionHeight(bool mounted)
@@ -2930,7 +2968,7 @@ class Player : public Unit, public GridObject<Player>
         uint32 m_timeSyncTimer;
         uint32 m_timeSyncClient;
         uint32 m_timeSyncServer;
-
+		
         InstanceTimeMap _instanceResetTimes;
         uint32 _pendingBindId;
         uint32 _pendingBindTimer;
@@ -2938,6 +2976,14 @@ class Player : public Unit, public GridObject<Player>
         // duel health and mana reset attributes
         uint32 healthBeforeDuel;
         uint32 manaBeforeDuel;
+		
+		// World of Warcraft Armory Feeds
+		WowarmoryFeeds m_wowarmory_feeds;
+
+		// Playerbot mod:
+		WorldLocation _corpseLocation;
+		PlayerbotAI* m_playerbotAI;
+		PlayerbotMgr* m_playerbotMgr;
 };
 
 void AddItemsSetItem(Player*player, Item* item);

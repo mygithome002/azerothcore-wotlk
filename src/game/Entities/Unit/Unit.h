@@ -919,7 +919,12 @@ public:
         m_heal -= amount;
     }
 
-    uint32 GetHeal() const { return m_heal; };
+    Unit* GetHealer() const { return m_healer; }
+    Unit* GetTarget() const { return m_target; }
+    uint32 GetHeal() const { return m_heal; }
+    uint32 GetAbsorb() const { return m_absorb; }
+    SpellInfo const* GetSpellInfo() const { return m_spellInfo; };
+    SpellSchoolMask GetSchoolMask() const { return m_schoolMask; };
 };
 
 class ProcEventInfo
@@ -1240,12 +1245,11 @@ struct CharmInfo
         bool _isAtStay;
         bool _isFollowing;
         bool _isReturning;
+        int32 _forcedSpellId;
+        uint64 _forcedTargetGUID;
         float _stayX;
         float _stayY;
         float _stayZ;
-
-        int32 _forcedSpellId;
-        uint64 _forcedTargetGUID;
 
         GlobalCooldownMgr _GlobalCooldownMgr;
 };
@@ -1323,8 +1327,8 @@ public:
 class SafeUnitPointer
 {
 public:
-    explicit SafeUnitPointer(Unit* defVal) : defaultValue(defVal), ptr(defVal) {}
-    SafeUnitPointer(const SafeUnitPointer& p) { ASSERT(false); }
+    explicit SafeUnitPointer(Unit* defVal) :  ptr(defVal), defaultValue(defVal) {}
+    SafeUnitPointer(const SafeUnitPointer& /*p*/) { ASSERT(false); }
     void Initialize(Unit* defVal) { defaultValue = defVal; ptr = defVal; }
     ~SafeUnitPointer();
     void SetPointedTo(Unit* u);
@@ -1340,6 +1344,10 @@ private:
 class Unit : public WorldObject
 {
     public:
+		// Playerbot mod
+		//Random preference
+		uint8 Preference = urand(0, 9);
+
         typedef UNORDERED_SET<Unit*> AttackerSet;
         typedef std::set<Unit*> ControlSet;
 
@@ -2044,6 +2052,9 @@ class Unit : public WorldObject
         // delayed+channeled spells are always interrupted
         void InterruptNonMeleeSpells(bool withDelayed, uint32 spellid = 0, bool withInstant = true, bool bySelf = false);
 
+        // Check if our current channel spell has attribute SPELL_ATTR5_CAN_CHANNEL_WHEN_MOVING
+        bool CanMoveDuringChannel() const;
+
         Spell* GetCurrentSpell(CurrentSpellTypes spellType) const { return m_currentSpells[spellType]; }
         Spell* GetCurrentSpell(uint32 spellType) const { return m_currentSpells[spellType]; }
         Spell* FindCurrentSpellBySpellId(uint32 spell_id) const;
@@ -2118,6 +2129,7 @@ class Unit : public WorldObject
         void SetModelVisible(bool on);
 
         // common function for visibility checks for player/creatures with detection code
+        uint32 GetPhaseByAuras() const;
         void SetPhaseMask(uint32 newPhaseMask, bool update);// overwrite WorldObject::SetPhaseMask
         void UpdateObjectVisibility(bool forced = true, bool fromUpdate = false);
 
@@ -2368,7 +2380,7 @@ class Unit : public WorldObject
         // pussywizard:
         // MMaps
         std::map<uint64, MMapTargetData> m_targetsNotAcceptable;
-        bool isTargetNotAcceptableByMMaps(uint64 guid, uint32 currTime, const Position* t = NULL) const { std::map<uint64, MMapTargetData>::const_iterator itr = m_targetsNotAcceptable.find(guid); if (itr != m_targetsNotAcceptable.end() && (itr->second._endTime >= currTime || t && !itr->second.PosChanged(*this, *t))) return true; return false; }
+        bool isTargetNotAcceptableByMMaps(uint64 guid, uint32 currTime, const Position* t = NULL) const { std::map<uint64, MMapTargetData>::const_iterator itr = m_targetsNotAcceptable.find(guid); if (itr != m_targetsNotAcceptable.end() && (itr->second._endTime >= currTime || (t && !itr->second.PosChanged(*this, *t)))) return true; return false; }
         uint32 m_mmapNotAcceptableStartTime;
         // Safe mover
         std::set<SafeUnitPointer*> SafeUnitPointerSet;
@@ -2406,7 +2418,11 @@ class Unit : public WorldObject
         // cooldowns
         virtual bool HasSpellCooldown(uint32 /*spell_id*/) const { return false; }
         virtual bool HasSpellItemCooldown(uint32 /*spell_id*/, uint32 /*itemid*/) const { return false; }
-        virtual void AddSpellCooldown(uint32 /*spell_id*/, uint32 /*itemid*/, uint32 /*end_time*/, bool needSendToClient = false, bool forceSendToSpectator = false) {}
+        virtual void AddSpellCooldown(uint32 /*spell_id*/, uint32 /*itemid*/, uint32 /*end_time*/, bool needSendToClient = false, bool forceSendToSpectator = false) {
+            // workaround for unused parameters
+            (void)needSendToClient;
+            (void)forceSendToSpectator;
+        }
 
         bool CanApplyResilience() const { return m_applyResilience; }
 

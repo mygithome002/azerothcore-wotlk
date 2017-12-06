@@ -40,7 +40,7 @@ class boss_curator : public CreatureScript
 
         struct boss_curatorAI : public BossAI
         {
-            boss_curatorAI(Creature* creature) : BossAI(creature, TYPE_CURATOR) { }
+            boss_curatorAI(Creature* creature) : BossAI(creature, DATA_CURATOR) { }
 
             void Reset()
             {
@@ -51,7 +51,7 @@ class boss_curator : public CreatureScript
                 me->ApplySpellImmune(0, IMMUNITY_EFFECT, SPELL_EFFECT_POWER_BURN, true);
             }
 
-            void KilledUnit(Unit* victim)
+            void KilledUnit(Unit*  /*victim*/)
             {
                 if (events.GetNextEventTime(EVENT_KILL_TALK) == 0)
                 {
@@ -75,6 +75,7 @@ class boss_curator : public CreatureScript
                 events.ScheduleEvent(EVENT_SPELL_ASTRAL_FLARE, 6000);
                 events.ScheduleEvent(EVENT_SPELL_BERSERK, 600000);
                 events.ScheduleEvent(EVENT_CHECK_HEALTH, 1000);
+                DoZoneInCombat();
             }
 
             void JustSummoned(Creature* summon)

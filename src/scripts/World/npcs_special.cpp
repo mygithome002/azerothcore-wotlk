@@ -181,7 +181,7 @@ public:
         return true;
     }
 
-    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 opt)
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32  /*opt*/)
     {
         if (!creature->AI()->GetData(DATA_DERBY_FINISHED) && quest->GetQuestId() == QUEST_FISHING_DERBY)
         {
@@ -290,7 +290,7 @@ public:
         return true;
     }
 
-    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32 opt)
+    bool OnQuestReward(Player* player, Creature* creature, Quest const* quest, uint32  /*opt*/)
     {
         if (!creature->AI()->GetData(DATA_ANGLER_FINISHED) && quest->GetQuestId() == QUEST_MASTER_ANGLER)
         {
@@ -307,123 +307,7 @@ public:
     }
 };
 
-enum shortJohnMirthil
-{
-    EVENT_SHORT_JOHN_ACTION             = 1,
-    EVENT_SHORT_JOHN_REMOVE_WARNING     = 2,
-    EVENT_SHORT_JOHN_MOVE_BACK          = 3,
 
-    SAY_SHORT_JOHN_ANNOUNCE             = 0,
-    SAY_SHORT_JOHN_BATTLE_START         = 1,
-
-    SPELL_SUMMON_PIRATE_BOOTY           = 23176
-};
-
-class npc_short_john_mirthil : public CreatureScript
-{
-public:
-    npc_short_john_mirthil() : CreatureScript("npc_short_john_mirthil") { }
-
-    struct npc_short_john_mirthilAI : public NullCreatureAI
-    {
-        npc_short_john_mirthilAI(Creature *c) : NullCreatureAI(c) 
-        {
-            pathPoint = 0;
-            startWarning = false;
-            events.Reset();
-            events.ScheduleEvent(EVENT_SHORT_JOHN_ACTION, 1000);
-        }
-
-        EventMap events;
-        bool startWarning;
-        uint32 pathPoint;
-
-        void StartMovement(bool reverse)
-        {
-            Movement::PointsArray pathPoints;
-            pathPoints.push_back(G3D::Vector3(me->GetPositionX(), me->GetPositionY(), me->GetPositionZ()));
-            WaypointPath const* i_path = sWaypointMgr->GetPath(me->GetEntry());
-
-            if (reverse)
-            {
-                for (uint8 i = 0; i < i_path->size(); ++i)
-                {
-                    WaypointData const* node = i_path->at(i_path->size()-1-i);
-                    pathPoints.push_back(G3D::Vector3(node->x, node->y, node->z));
-                }
-                float x, y, z, o;
-                me->GetRespawnPosition(x, y, z, &o);
-                pathPoints.push_back(G3D::Vector3(x, y, z));
-            }
-            else
-            {
-                for (uint8 i = 0; i < i_path->size(); ++i)
-                {
-                    WaypointData const* node = i_path->at(i);
-                    pathPoints.push_back(G3D::Vector3(node->x, node->y, node->z));
-                }
-            }
-
-            me->SetWalk(!reverse);
-            me->GetMotionMaster()->MoveSplinePath(&pathPoints);
-        }
-
-        void MovementInform(uint32 type, uint32 point)
-        {
-            if (type != ESCORT_MOTION_TYPE)
-                return;
-
-            ++pathPoint;
-            if (pathPoint == 16)
-                events.ScheduleEvent(EVENT_SHORT_JOHN_MOVE_BACK, 0);
-            else if (pathPoint == 33)
-                CreatureAI::EnterEvadeMode();
-        }
-
-        void UpdateAI(uint32 diff)
-        {
-            events.Update(diff);
-            switch (events.GetEvent())
-            {
-                case EVENT_SHORT_JOHN_ACTION:
-                {
-                    time_t curtime = time(NULL);
-                    tm strdate;
-                    ACE_OS::localtime_r(&curtime, &strdate);
-                    if (!startWarning && strdate.tm_hour % 3 == 0 && strdate.tm_min == 0)
-                    {
-                        sCreatureTextMgr->SendChat(me, SAY_SHORT_JOHN_ANNOUNCE, 0, CHAT_MSG_MONSTER_YELL, LANG_UNIVERSAL, TEXT_RANGE_ZONE);
-                        startWarning = true;
-                        events.ScheduleEvent(EVENT_SHORT_JOHN_REMOVE_WARNING, 150000); // 2.5 minutes, to be sure above condition fails
-                        me->SetUInt32Value(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_NONE);
-
-                        pathPoint = 0;
-                        StartMovement(false);
-                    }
-
-                    events.RepeatEvent(1000);
-                    break;
-                }
-                case EVENT_SHORT_JOHN_REMOVE_WARNING:
-                    startWarning = false;
-                    me->SetUInt32Value(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_GOSSIP|UNIT_NPC_FLAG_QUESTGIVER);
-                    events.PopEvent();
-                    break;
-                case EVENT_SHORT_JOHN_MOVE_BACK:
-                    me->CastSpell(me, SPELL_SUMMON_PIRATE_BOOTY, true);
-                    sCreatureTextMgr->SendChat(me, SAY_SHORT_JOHN_BATTLE_START, 0, CHAT_MSG_MONSTER_YELL, LANG_UNIVERSAL, TEXT_RANGE_ZONE);
-                    StartMovement(true);
-                    events.PopEvent();
-                    break;
-            }
-        }
-    };
-
-    CreatureAI* GetAI(Creature* pCreature) const
-    {
-        return new npc_short_john_mirthilAI (pCreature);
-    }
-};
 
 enum eTrainingDummy
 {
@@ -1940,61 +1824,34 @@ class npc_wormhole : public CreatureScript
 
 enum PetTrainer
 {
-    TEXT_ISHUNTER               = 5838,
-    TEXT_NOTHUNTER              = 5839,
-    TEXT_PETINFO                = 13474,
-    TEXT_CONFIRM                = 7722
+    PET_UNLEARN      = 6520,
+    YES_PLEASE_DO    = 0
 };
-
-#define GOSSIP_PET1             "How do I train my pet?"
-#define GOSSIP_PET2             "I wish to untrain my pet."
-#define GOSSIP_PET_CONFIRM      "Yes, please do."
 
 class npc_pet_trainer : public CreatureScript
 {
 public:
     npc_pet_trainer() : CreatureScript("npc_pet_trainer") { }
 
-    bool OnGossipHello(Player* player, Creature* creature)
+    struct npc_pet_trainerAI : public ScriptedAI
     {
-        if (creature->IsQuestGiver())
-            player->PrepareQuestMenu(creature->GetGUID());
+        npc_pet_trainerAI(Creature* creature) : ScriptedAI(creature) { }
 
-        if (player->getClass() == CLASS_HUNTER)
+
+        void sGossipSelect(Player* player, uint32 menuId, uint32 gossipListId) override
         {
-            player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_PET1, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
-            if (player->GetPet() && player->GetPet()->getPetType() == HUNTER_PET)
-                player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_PET2, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 2);
-
-            player->PlayerTalkClass->SendGossipMenu(TEXT_ISHUNTER, creature->GetGUID());
-            return true;
+            if (menuId == PET_UNLEARN && gossipListId == YES_PLEASE_DO)
+            {
+                player->ResetPetTalents();
+                player->PlayerTalkClass->SendCloseGossip();
+            }
         }
-        player->PlayerTalkClass->SendGossipMenu(TEXT_NOTHUNTER, creature->GetGUID());
-        return true;
-    }
+    };
 
-    bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 action)
+
+    CreatureAI* GetAI(Creature* creature) const override
     {
-        player->PlayerTalkClass->ClearMenus();
-        switch (action)
-        {
-            case GOSSIP_ACTION_INFO_DEF + 1:
-                player->PlayerTalkClass->SendGossipMenu(TEXT_PETINFO, creature->GetGUID());
-                break;
-            case GOSSIP_ACTION_INFO_DEF + 2:
-                {
-                    player->ADD_GOSSIP_ITEM(GOSSIP_ICON_CHAT, GOSSIP_PET_CONFIRM, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 3);
-                    player->PlayerTalkClass->SendGossipMenu(TEXT_CONFIRM, creature->GetGUID());
-                }
-                break;
-            case GOSSIP_ACTION_INFO_DEF + 3:
-                {
-                    player->ResetPetTalents();
-                    player->CLOSE_GOSSIP_MENU();
-                }
-                break;
-        }
-        return true;
+        return new npc_pet_trainerAI(creature);
     }
 };
 
@@ -2647,7 +2504,6 @@ void AddSC_npcs_special()
     // Ours
     new npc_elder_clearwater();
     new npc_riggle_bassbait();
-    new npc_short_john_mirthil();
     new npc_target_dummy();
     new npc_training_dummy();
 

@@ -72,6 +72,11 @@ class HashMapHolder
         static MapType  m_objectMap;
 };
 
+/// Define the static members of HashMapHolder
+
+template <class T> UNORDERED_MAP< uint64, T* > HashMapHolder<T>::m_objectMap;
+template <class T> typename HashMapHolder<T>::LockType HashMapHolder<T>::i_lock;
+
 // pussywizard:
 class DelayedCorpseAction
 {
@@ -187,6 +192,11 @@ class ObjectAccessor
         // ACCESS LIKE THAT IS NOT THREAD SAFE
         static Pet* FindPet(uint64);
         static Player* FindPlayer(uint64);
+
+		// this returns Player even if he is not in world, for example teleporting
+		static Player* FindConnectedPlayer(uint64 const&);
+		static Player* FindConnectedPlayerByName(std::string const& name);
+
         static Player* FindPlayerInOrOutOfWorld(uint64 m_guid); 
         static Unit* FindUnit(uint64);
         static Player* FindPlayerByName(std::string const& name, bool checkInWorld = true);

@@ -23,12 +23,15 @@
 #include "ArenaSpectator.h"
 #include "Chat.h"
 #include "BattlegroundMgr.h"
+#include "ScriptMgr.h"
 
 #define MOVEMENT_PACKET_TIME_DELAY 0
 
 void WorldSession::HandleMoveWorldportAckOpcode(WorldPacket & /*recvData*/)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: got MSG_MOVE_WORLDPORT_ACK.");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: got MSG_MOVE_WORLDPORT_ACK.");
+#endif
     HandleMoveWorldportAckOpcode();
 }
 
@@ -221,15 +224,21 @@ void WorldSession::HandleMoveWorldportAckOpcode()
 
 void WorldSession::HandleMoveTeleportAck(WorldPacket& recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "MSG_MOVE_TELEPORT_ACK");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "MSG_MOVE_TELEPORT_ACK");
+#endif
     uint64 guid;
 
     recvData.readPackGUID(guid);
 
     uint32 flags, time;
     recvData >> flags >> time; // unused
-    ;//sLog->outStaticDebug("Guid " UI64FMTD, guid);
-    ;//sLog->outStaticDebug("Flags %u, time %u", flags, time/IN_MILLISECONDS);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("Guid " UI64FMTD, guid);
+#endif
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("Flags %u, time %u", flags, time/IN_MILLISECONDS);
+#endif
 
     Player* plMover = _player->m_mover->ToPlayer();
 
@@ -392,6 +401,8 @@ void WorldSession::HandleMovementOpcodes(WorldPacket & recvData)
         // now client not include swimming flag in case jumping under water
         plrMover->SetInWater(!plrMover->IsInWater() || plrMover->GetBaseMap()->IsUnderWater(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY(), movementInfo.pos.GetPositionZ()));
     }
+    if (plrMover)//Hook for OnPlayerMove
+        sScriptMgr->OnPlayerMove(plrMover, movementInfo, opcode);
     // Dont allow to turn on walking if charming other player
     if (mover->GetGUID() != _player->GetGUID())
         movementInfo.flags &= ~MOVEMENTFLAG_WALKING;
@@ -463,16 +474,26 @@ void WorldSession::HandleMovementOpcodes(WorldPacket & recvData)
 
         plrMover->UpdateFallInformationIfNeed(movementInfo, opcode);
 
-        if (movementInfo.pos.GetPositionZ() < -500.0f)
+        if (movementInfo.pos.GetPositionZ() < plrMover->GetMap()->GetMinHeight(movementInfo.pos.GetPositionX(), movementInfo.pos.GetPositionY()))
             if (!plrMover->GetBattleground() || !plrMover->GetBattleground()->HandlePlayerUnderMap(_player))
             {
                 if (plrMover->IsAlive())
                 {
+                    plrMover->SetFlag(PLAYER_FLAGS, PLAYER_FLAGS_IS_OUT_OF_BOUNDS);
                     plrMover->EnvironmentalDamage(DAMAGE_FALL_TO_VOID, GetPlayer()->GetMaxHealth());
                     // player can be alive if GM
                     if (plrMover->IsAlive())
                         plrMover->KillPlayer();
                 }
+                else if (!plrMover->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_IS_OUT_OF_BOUNDS))
+                {
+                    WorldSafeLocsEntry const* grave = sObjectMgr->GetClosestGraveyard(plrMover->GetPositionX(), plrMover->GetPositionY(), plrMover->GetPositionZ(), plrMover->GetMapId(), plrMover->GetTeamId());
+
+                    if ( grave)
+                        plrMover->TeleportTo(grave->map_id, grave->x, grave->y, grave->z, plrMover->GetOrientation());
+                    plrMover->Relocate(grave->x, grave->y, grave->z, plrMover->GetOrientation());
+                }
+
                 plrMover->StopMovingOnCurrentPos(); // pussywizard: moving corpse can't release spirit
             }
     }
@@ -481,7 +502,9 @@ void WorldSession::HandleMovementOpcodes(WorldPacket & recvData)
 void WorldSession::HandleForceSpeedChangeAck(WorldPacket &recvData)
 {
     uint32 opcode = recvData.GetOpcode();
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: Recvd %s (%u, 0x%X) opcode", LookupOpcodeName(opcode), opcode, opcode);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: Recvd %s (%u, 0x%X) opcode", LookupOpcodeName(opcode), opcode, opcode);
+#endif
 
     /* extract packet */
     uint64 guid;
@@ -559,7 +582,9 @@ void WorldSession::HandleForceSpeedChangeAck(WorldPacket &recvData)
 
 void WorldSession::HandleSetActiveMoverOpcode(WorldPacket &recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: Recvd CMSG_SET_ACTIVE_MOVER");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: Recvd CMSG_SET_ACTIVE_MOVER");
+#endif
 
     uint64 guid;
     recvData >> guid;
@@ -573,7 +598,9 @@ void WorldSession::HandleSetActiveMoverOpcode(WorldPacket &recvData)
 
 void WorldSession::HandleMoveNotActiveMover(WorldPacket &recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: Recvd CMSG_MOVE_NOT_ACTIVE_MOVER");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "WORLD: Recvd CMSG_MOVE_NOT_ACTIVE_MOVER");
+#endif
 
     uint64 old_mover_guid;
     recvData.readPackGUID(old_mover_guid);
@@ -602,7 +629,9 @@ void WorldSession::HandleMountSpecialAnimOpcode(WorldPacket& /*recvData*/)
 
 void WorldSession::HandleMoveKnockBackAck(WorldPacket & recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_MOVE_KNOCK_BACK_ACK");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_MOVE_KNOCK_BACK_ACK");
+#endif
 
     uint64 guid;
     recvData.readPackGUID(guid);
@@ -637,7 +666,9 @@ void WorldSession::HandleMoveKnockBackAck(WorldPacket & recvData)
 
 void WorldSession::HandleMoveHoverAck(WorldPacket& recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_MOVE_HOVER_ACK");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_MOVE_HOVER_ACK");
+#endif
 
     uint64 guid;                                            // guid - unused
     recvData.readPackGUID(guid);
@@ -653,7 +684,9 @@ void WorldSession::HandleMoveHoverAck(WorldPacket& recvData)
 
 void WorldSession::HandleMoveWaterWalkAck(WorldPacket& recvData)
 {
-    ;//sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_MOVE_WATER_WALK_ACK");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outDebug(LOG_FILTER_NETWORKIO, "CMSG_MOVE_WATER_WALK_ACK");
+#endif
 
     uint64 guid;                                            // guid - unused
     recvData.readPackGUID(guid);
@@ -688,5 +721,5 @@ void WorldSession::HandleSummonResponseOpcode(WorldPacket& recvData)
         agree = false;
     }
     _player->SetSummonAsSpectator(false);
-    _player->SummonIfPossible(agree);
+    _player->SummonIfPossible(agree, summoner_guid);
 }

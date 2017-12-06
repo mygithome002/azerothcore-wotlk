@@ -41,6 +41,32 @@ Player* ObjectAccessor::GetObjectInWorld(uint64 guid, Player* /*typeSpecifier*/)
     return player && player->IsInWorld() ? player : NULL;
 }
 
+namespace PlayerNameMapHolder
+{
+	typedef std::unordered_map<std::string, Player*> MapType;
+	static MapType PlayerNameMap;
+
+	void Insert(Player* p)
+	{
+		PlayerNameMap[p->GetName()] = p;
+	}
+
+	void Remove(Player* p)
+	{
+		PlayerNameMap.erase(p->GetName());
+	}
+
+	Player* Find(std::string const& name)
+	{
+		std::string charName(name);
+		if (!normalizePlayerName(charName))
+			return nullptr;
+
+		auto itr = PlayerNameMap.find(charName);
+		return (itr != PlayerNameMap.end()) ? itr->second : nullptr;
+	}
+} // namespace PlayerNameMapHolder
+
 WorldObject* ObjectAccessor::GetWorldObject(WorldObject const& p, uint64 guid)
 {
     switch (GUID_HIPART(guid))
@@ -159,6 +185,16 @@ Pet* ObjectAccessor::FindPet(uint64 guid)
 Player* ObjectAccessor::FindPlayer(uint64 guid)
 {
     return GetObjectInWorld(guid, (Player*)NULL);
+}
+
+Player* ObjectAccessor::FindConnectedPlayer(uint64 const& guid)
+{
+	return HashMapHolder<Player>::Find(guid);
+}
+
+Player* ObjectAccessor::FindConnectedPlayerByName(std::string const& name)
+{
+	return PlayerNameMapHolder::Find(name);
 }
 
 Player* ObjectAccessor::FindPlayerInOrOutOfWorld(uint64 guid)
@@ -313,7 +349,9 @@ Corpse* ObjectAccessor::ConvertCorpseForPlayer(uint64 player_guid, bool insignia
         return NULL;
     }
 
-    ;//sLog->outStaticDebug("Deleting Corpse and spawned bones.");
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+    sLog->outStaticDebug("Deleting Corpse and spawned bones.");
+#endif
 
     // Map can be NULL
     Map* map = corpse->FindMap();
@@ -510,10 +548,6 @@ void ObjectAccessor::UnloadAll()
 
 std::map<std::string, Player*> ObjectAccessor::playerNameToPlayerPointer;
 
-/// Define the static members of HashMapHolder
-
-template <class T> UNORDERED_MAP< uint64, T* > HashMapHolder<T>::m_objectMap;
-template <class T> typename HashMapHolder<T>::LockType HashMapHolder<T>::i_lock;
 
 /// Global definitions for the hashmap storage
 

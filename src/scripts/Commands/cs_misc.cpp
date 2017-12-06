@@ -28,6 +28,10 @@
 #include "BattlegroundMgr.h"
 #include "MapManager.h"
 
+ // playerbot mod
+#include "../../modules/bot/playerbot/playerbot.h"
+#include "../../modules/bot/playerbot/GuildTaskMgr.h"
+
 class misc_commandscript : public CommandScript
 {
 public:
@@ -113,7 +117,12 @@ public:
             { "unbindsight",        SEC_ADMINISTRATOR,      false, HandleUnbindSightCommand,            "" },
             { "playall",            SEC_GAMEMASTER,         false, HandlePlayAllCommand,                "" },
             { "skirmish",           SEC_ADMINISTRATOR,      false, HandleSkirmishCommand,               "" },
-            { "mailbox",            SEC_MODERATOR,          false, &HandleMailBoxCommand,               "" }
+            { "mailbox",            SEC_MODERATOR,          false, &HandleMailBoxCommand,               "" },
+
+			// playerbot mod
+			{ "rndbot",				SEC_GAMEMASTER,         true,  &RandomPlayerbotMgr::HandlePlayerbotConsoleCommand,     "" },
+			{ "bot",				SEC_PLAYER,				false, &PlayerbotMgr::HandlePlayerbotMgrCommand,               "" },
+			{ "gtask",				SEC_GAMEMASTER,         true,  &GuildTaskMgr::HandleConsoleCommand,           "" },
         };
         return commandTable;
     }
@@ -191,7 +200,7 @@ public:
             return false;
         }
 
-        if (tokens.size() != count+2)
+        if (tokens.size() != uint16(count+2))
         {
             handler->PSendSysMessage("Invalid number of nicknames for this bracket.");
             handler->SetSentErrorMessage(true);
@@ -400,8 +409,8 @@ public:
         object->GetZoneAndAreaId(zoneId, areaId);
 
         MapEntry const* mapEntry = sMapStore.LookupEntry(object->GetMapId());
-        AreaTableEntry const* zoneEntry = GetAreaEntryByAreaID(zoneId);
-        AreaTableEntry const* areaEntry = GetAreaEntryByAreaID(areaId);
+        AreaTableEntry const* zoneEntry = sAreaTableStore.LookupEntry(zoneId);
+        AreaTableEntry const* areaEntry = sAreaTableStore.LookupEntry(areaId);
 
         float zoneX = object->GetPositionX();
         float zoneY = object->GetPositionY();
@@ -445,7 +454,7 @@ public:
 
         if (status)
             handler->PSendSysMessage(LANG_LIQUID_STATUS, liquidStatus.level, liquidStatus.depth_level, liquidStatus.entry, liquidStatus.type_flags, status);
-        if (Transport* t = object->GetTransport())
+        if (object->GetTransport())
             handler->PSendSysMessage("Transport offset: %.2f, %.2f, %.2f, %.2f", object->m_movementInfo.transport.pos.GetPositionX(), object->m_movementInfo.transport.pos.GetPositionY(), object->m_movementInfo.transport.pos.GetPositionZ(), object->m_movementInfo.transport.pos.GetOrientation());
 
         return true;
@@ -612,8 +621,8 @@ public:
             else
                 _player->SaveRecallPosition();
 
-            _player->TeleportTo(target->GetMapId(), target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()+0.25f, _player->GetOrientation(), TELE_TO_GM_MODE);
-            _player->SetPhaseMask(target->GetPhaseMask() | 1, false);
+            if (_player->TeleportTo(target->GetMapId(), target->GetPositionX(), target->GetPositionY(), target->GetPositionZ()+0.25f, _player->GetOrientation(), TELE_TO_GM_MODE, target))
+                _player->SetPhaseMask(target->GetPhaseMask() | 1, false);
         }
         else
         {
@@ -688,12 +697,16 @@ public:
             }
             else if (map->IsDungeon())
             {
-                // pussywizard: prevent unbinding normal player's perm bind by just summoning him >_>
-                if (!target->GetSession()->GetSecurity())
+                // Allow GM to summon players or only other GM accounts inside instances.
+                if (!sWorld->getBoolConfig(CONFIG_INSTANCE_GMSUMMON_PLAYER))
                 {
-                    handler->PSendSysMessage("Only GMs can be summoned to an instance!");
-                    handler->SetSentErrorMessage(true);
-                    return false;
+                    // pussywizard: prevent unbinding normal player's perm bind by just summoning him >_>
+                    if (!target->GetSession()->GetSecurity())
+                    {
+                        handler->PSendSysMessage("Only GMs can be summoned to an instance!");
+                        handler->SetSentErrorMessage(true);
+                        return false;
+                    }
                 }
 
                 Map* destMap = target->GetMap();
@@ -730,8 +743,8 @@ public:
             // before GM
             float x, y, z;
             handler->GetSession()->GetPlayer()->GetClosePoint(x, y, z, target->GetObjectSize());
-            target->TeleportTo(handler->GetSession()->GetPlayer()->GetMapId(), x, y, z, target->GetOrientation());
-            target->SetPhaseMask(handler->GetSession()->GetPlayer()->GetPhaseMask(), false);
+            if (target->TeleportTo(handler->GetSession()->GetPlayer()->GetMapId(), x, y, z, target->GetOrientation(), 0, handler->GetSession()->GetPlayer()))
+                target->SetPhaseMask(handler->GetSession()->GetPlayer()->GetPhaseMask(), false);
         }
         else
         {
@@ -841,7 +854,7 @@ public:
             // before GM
             float x, y, z;
             handler->GetSession()->GetPlayer()->GetClosePoint(x, y, z, player->GetObjectSize());
-            player->TeleportTo(handler->GetSession()->GetPlayer()->GetMapId(), x, y, z, player->GetOrientation());
+            player->TeleportTo(handler->GetSession()->GetPlayer()->GetMapId(), x, y, z, player->GetOrientation(), 0, handler->GetSession()->GetPlayer());
         }
 
         return true;
@@ -1092,7 +1105,7 @@ public:
         return true;
     }
 
-    static bool HandleSaveCommand(ChatHandler* handler, char const* /*args*/)
+    static bool HandleSaveCommand(ChatHandler*  /*handler*/, char const* /*args*/)
     {
         // pussywizard: fully disabled on 28.12.2011, but disabled it "silently"
         return true;
@@ -1276,7 +1289,7 @@ public:
 
         uint32 zoneId = player->GetZoneId();
 
-        AreaTableEntry const* areaEntry = GetAreaEntryByAreaID(zoneId);
+        AreaTableEntry const* areaEntry = sAreaTableStore.LookupEntry(zoneId);
         if (!areaEntry || areaEntry->zone !=0)
         {
             handler->PSendSysMessage(LANG_COMMAND_GRAVEYARDWRONGZONE, graveyardId, zoneId);
@@ -1407,17 +1420,23 @@ public:
             return false;
         }
 
-        int32 area = GetAreaFlagByAreaID(atoi((char*)args));
-        int32 offset = area / 32;
-        uint32 val = uint32((1 << (area % 32)));
-
-        if (area<0 || offset >= PLAYER_EXPLORED_ZONES_SIZE)
+        AreaTableEntry const* area = sAreaTableStore.LookupEntry(atoi(args));
+        if (!area)
         {
             handler->SendSysMessage(LANG_BAD_VALUE);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
+        int32 offset = area->exploreFlag / 32;
+        if (offset >= PLAYER_EXPLORED_ZONES_SIZE)
+        {
+            handler->SendSysMessage(LANG_BAD_VALUE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        uint32 val = uint32((1 << (area->exploreFlag % 32)));
         uint32 currFields = playerTarget->GetUInt32Value(PLAYER_EXPLORED_ZONES_1 + offset);
         playerTarget->SetUInt32Value(PLAYER_EXPLORED_ZONES_1 + offset, uint32((currFields | val)));
 
@@ -1438,17 +1457,23 @@ public:
             return false;
         }
 
-        int32 area = GetAreaFlagByAreaID(atoi((char*)args));
-        int32 offset = area / 32;
-        uint32 val = uint32((1 << (area % 32)));
-
-        if (area < 0 || offset >= PLAYER_EXPLORED_ZONES_SIZE)
+        AreaTableEntry const* area = sAreaTableStore.LookupEntry(atoi(args));
+        if (!area)
         {
             handler->SendSysMessage(LANG_BAD_VALUE);
             handler->SetSentErrorMessage(true);
             return false;
         }
 
+        int32 offset = area->exploreFlag / 32;
+        if (offset >= PLAYER_EXPLORED_ZONES_SIZE)
+        {
+            handler->SendSysMessage(LANG_BAD_VALUE);
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+
+        uint32 val = uint32((1 << (area->exploreFlag % 32)));
         uint32 currFields = playerTarget->GetUInt32Value(PLAYER_EXPLORED_ZONES_1 + offset);
         playerTarget->SetUInt32Value(PLAYER_EXPLORED_ZONES_1 + offset, uint32((currFields ^ val)));
 
@@ -1510,7 +1535,9 @@ public:
         if (!playerTarget)
             playerTarget = player;
 
-        ;//sLog->outDetail(handler->GetTrinityString(LANG_ADDITEM), itemId, count);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outDetail(handler->GetTrinityString(LANG_ADDITEM), itemId, count);
+#endif
 
         ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemId);
         if (!itemTemplate)
@@ -1597,7 +1624,9 @@ public:
         if (!playerTarget)
             playerTarget = player;
 
-        ;//sLog->outDetail(handler->GetTrinityString(LANG_ADDITEMSET), itemSetId);
+#if defined(ENABLE_EXTRAS) && defined(ENABLE_EXTRA_LOGS)
+        sLog->outDetail(handler->GetTrinityString(LANG_ADDITEMSET), itemSetId);
+#endif
 
         bool found = false;
         ItemTemplateContainer const* its = sObjectMgr->GetItemTemplateStore();
@@ -1883,7 +1912,19 @@ public:
 #if TRINITY_ENDIAN == BIGENDIAN
                 EndianConvertReverse(ip);
 #endif
+                PreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_SEL_IP2NATION_COUNTRY);
 
+                stmt->setUInt32(0, ip);
+
+                PreparedQueryResult result2 = LoginDatabase.Query(stmt);
+
+                if (result2)
+                {
+                    Field* fields2 = result2->Fetch();
+                    lastIp.append(" (");
+                    lastIp.append(fields2[0].GetString());
+                    lastIp.append(")");
+                }
             }
             else
             {
@@ -2005,12 +2046,12 @@ public:
 
         MapEntry const* map = sMapStore.LookupEntry(mapId);
 
-        AreaTableEntry const* area = GetAreaEntryByAreaID(areaId);
+        AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId);
         if (area)
         {
             areaName = area->area_name[locale];
 
-            AreaTableEntry const* zone = GetAreaEntryByAreaID(area->zone);
+            AreaTableEntry const* zone = sAreaTableStore.LookupEntry(area->zone);
             if (zone)
                 zoneName = zone->area_name[locale];
         }
@@ -3066,10 +3107,10 @@ public:
                 if (flags.empty())
                     flags = "None";
 
-                Player* p = ObjectAccessor::FindPlayerInOrOutOfWorld((*itr).guid);
+                /*Player* p = ObjectAccessor::FindPlayerInOrOutOfWorld((*itr).guid);
                 const char* onlineState = p ? "online" : "offline";
 
-                /*handler->PSendSysMessage(LANG_GROUP_PLAYER_NAME_GUID, slot.name.c_str(), onlineState,
+                handler->PSendSysMessage(LANG_GROUP_PLAYER_NAME_GUID, slot.name.c_str(), onlineState,
                     GUID_LOPART(slot.guid), flags.c_str(), lfg::GetRolesString(slot.roles).c_str());*/
             }
         }

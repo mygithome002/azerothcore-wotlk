@@ -301,11 +301,11 @@ bool ChatHandler::ExecuteCommandInTable(std::vector<ChatCommand> const& table, c
                 uint32 areaId = player->GetAreaId();
                 std::string areaName = "Unknown";
                 std::string zoneName = "Unknown";
-                if (AreaTableEntry const* area = GetAreaEntryByAreaID(areaId))
+                if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId))
                 {
                     int locale = GetSessionDbcLocale();
                     areaName = area->area_name[locale];
-                    if (AreaTableEntry const* zone = GetAreaEntryByAreaID(area->zone))
+                    if (AreaTableEntry const* zone = sAreaTableStore.LookupEntry(area->zone))
                         zoneName = zone->area_name[locale];
                 }
 
@@ -895,7 +895,7 @@ GameObject* ChatHandler::GetObjectGlobalyWithGuidOrNearWithDbGuid(uint32 lowguid
         CellCoord p(Trinity::ComputeCellCoord(pl->GetPositionX(), pl->GetPositionY()));
         Cell cell(p);
 
-        Trinity::GameObjectWithDbGUIDCheck go_check(*pl, lowguid);
+        Trinity::GameObjectWithDbGUIDCheck go_check(lowguid);
         Trinity::GameObjectSearcher<Trinity::GameObjectWithDbGUIDCheck> checker(pl, obj, go_check);
 
         TypeContainerVisitor<Trinity::GameObjectSearcher<Trinity::GameObjectWithDbGUIDCheck>, GridTypeMapContainer > object_checker(checker);

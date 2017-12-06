@@ -260,7 +260,7 @@ class spell_dk_raise_ally_trigger : public SpellScriptLoader
             void HandleEffectRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
                 if (Unit* charm = GetUnitOwner()->GetCharm())
-                    if (charm->GetEntry() == GetSpellInfo()->Effects[EFFECT_0].MiscValue)
+                    if (GetSpellInfo()->Effects[EFFECT_0].MiscValue >= 0 && charm->GetEntry() == uint32(GetSpellInfo()->Effects[EFFECT_0].MiscValue))
                         charm->ToCreature()->DespawnOrUnsummon();
             }
 
@@ -390,7 +390,7 @@ class spell_dk_master_of_ghouls : public SpellScriptLoader
         {
             PrepareAuraScript(spell_dk_master_of_ghouls_AuraScript);
 
-            void HandleEffectApply(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
+            void HandleEffectApply(AuraEffect const*  /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
                 Unit* target = GetTarget();
                 if (target->GetTypeId() == TYPEID_PLAYER)
@@ -782,7 +782,7 @@ class spell_dk_dancing_rune_weapon : public SpellScriptLoader
                 Unit* target = eventInfo.GetActionTarget();
                 Unit* dancingRuneWeapon = NULL;
                 for (Unit::ControlSet::const_iterator itr = player->m_Controlled.begin(); itr != player->m_Controlled.end(); ++itr)
-                    if ((*itr)->GetEntry() == GetSpellInfo()->Effects[EFFECT_0].MiscValue)
+                    if (int32((*itr)->GetEntry()) == GetSpellInfo()->Effects[EFFECT_0].MiscValue)
                     {
                         dancingRuneWeapon = *itr;
                         break;
@@ -835,7 +835,7 @@ class spell_dk_dancing_rune_weapon_visual : public SpellScriptLoader
         {
             PrepareAuraScript(spell_dk_dancing_rune_weapon_visual_AuraScript);
 
-            void HandleEffectApply(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
+            void HandleEffectApply(AuraEffect const*  /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
                 PreventDefaultAction();
                 if (Unit* owner = GetUnitOwner()->ToTempSummon()->GetSummoner())
@@ -926,7 +926,7 @@ class spell_dk_pet_scaling : public SpellScriptLoader
                 }
             }
 
-            void CalculateSPAmount(AuraEffect const* aurEff, int32 & amount, bool & /*canBeRecalculated*/)
+            void CalculateSPAmount(AuraEffect const*  /*aurEff*/, int32 & amount, bool & /*canBeRecalculated*/)
             {
                 // xinef: dk gargoyle inherits 33% of SP
                 if (GetUnitOwner()->GetEntry() != NPC_EBON_GARGOYLE)
@@ -937,7 +937,7 @@ class spell_dk_pet_scaling : public SpellScriptLoader
                     int32 modifier = 33;
 
                     // xinef: impurity
-                    if (AuraEffect const* impurityEff = owner->GetDummyAuraEffect(SPELLFAMILY_DEATHKNIGHT, 1986, 0))
+                    if (owner->GetDummyAuraEffect(SPELLFAMILY_DEATHKNIGHT, 1986, 0))
                         modifier = 40;
 
                     amount = CalculatePct(std::max<int32>(0, owner->GetTotalAttackPowerValue(BASE_ATTACK)), modifier);
@@ -948,7 +948,7 @@ class spell_dk_pet_scaling : public SpellScriptLoader
                 }
             }
 
-            void CalculateHasteAmount(AuraEffect const* aurEff, int32 & amount, bool & /*canBeRecalculated*/)
+            void CalculateHasteAmount(AuraEffect const*  /*aurEff*/, int32 & amount, bool & /*canBeRecalculated*/)
             {
                 // xinef: scale haste with owners melee haste
                 if (Unit* owner = GetUnitOwner()->GetOwner())
@@ -1120,7 +1120,7 @@ class spell_dk_anti_magic_shell_self : public SpellScriptLoader
                 GetTarget()->CastCustomSpell(SPELL_DK_RUNIC_POWER_ENERGIZE, SPELLVALUE_BASE_POINT0, bp, GetTarget(), true, NULL, aurEff);
             }
 
-            void HandleEffectApply(AuraEffect const* aurEff, AuraEffectHandleModes /*mode*/)
+            void HandleEffectApply(AuraEffect const*  /*aurEff*/, AuraEffectHandleModes /*mode*/)
             {
                 Unit* target = GetTarget();
                 target->ApplySpellImmune(GetId(), IMMUNITY_ID, 33786, true); // cyclone
@@ -1545,12 +1545,16 @@ class spell_dk_death_grip : public SpellScriptLoader
         {
             PrepareSpellScript(spell_dk_death_grip_SpellScript);
 
-            SpellCastResult CheckPvPRange()
+            SpellCastResult CheckCast()
             {
                 Unit* caster = GetCaster();
-                if (Unit* target = GetExplTargetUnit())
-                    if (target->GetTypeId() == TYPEID_PLAYER && caster->GetExactDist(target) < 8.0f) // xinef: should be 8.0f, but we have to add target size (1.5f)
-                        return SPELL_FAILED_TOO_CLOSE;
+                Unit* target = GetExplTargetUnit();
+
+                if (target->GetTypeId() == TYPEID_PLAYER && caster->GetExactDist(target) < 8.0f) // xinef: should be 8.0f, but we have to add target size (1.5f)
+                    return SPELL_FAILED_TOO_CLOSE;
+
+                if (caster->HasUnitState(UNIT_STATE_JUMPING) || caster->HasUnitMovementFlag(MOVEMENTFLAG_FALLING))
+                    return SPELL_FAILED_MOVING;
 
                 return SPELL_CAST_OK;
             }
@@ -1560,16 +1564,28 @@ class spell_dk_death_grip : public SpellScriptLoader
                 Unit* caster = GetCaster();
                 Unit* target = GetHitUnit();
                 Unit* baseTarget = GetExplTargetUnit();
+                Creature* targetCreature = GetHitCreature();
 
                 if (caster != target)
-                    caster->CastSpell(target, 49560, true);
+                {                    
+                    if (targetCreature->isWorldBoss() || targetCreature->IsDungeonBoss())
+                    {
+                        return;
+                    }
+                    else
+                    {
+                        caster->CastSpell(target, 49560, true);
+                        const SpellInfo* spellInfo = sSpellMgr->GetSpellInfo(1766); // Rogue kick
+                        if (!target->IsImmunedToSpellEffect(spellInfo, EFFECT_0))
+                            target->InterruptNonMeleeSpells(true);
+                    }
+                }
                 else
                     baseTarget->CastSpell(caster, 49560, true);
             }
 
             void HandleDummy(SpellEffIndex /*effIndex*/)
             {
-                int32 damage = GetEffectValue();
                 float casterZ = GetCaster()->GetPositionZ(); // for Ring of Valor
                 WorldLocation gripPos = *GetExplTargetDest();
                 if (Unit* target = GetHitUnit())
@@ -1593,7 +1609,7 @@ class spell_dk_death_grip : public SpellScriptLoader
             {
                 if (m_scriptSpellId == 49576) // xinef: base death grip, add pvp range restriction
                 {
-                    OnCheckCast += SpellCheckCastFn(spell_dk_death_grip_SpellScript::CheckPvPRange);
+                    OnCheckCast += SpellCheckCastFn(spell_dk_death_grip_SpellScript::CheckCast);
                     OnEffectHitTarget += SpellEffectFn(spell_dk_death_grip_SpellScript::HandleBaseDummy, EFFECT_0, SPELL_EFFECT_DUMMY);
                 }
                 else

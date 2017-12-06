@@ -4,9 +4,8 @@
 
 conf/*
 !conf/*.dist
-modules/*
 
-!modules/drassil/*
+!modules/drassil
 modules/drassil/joiner
 !modules/hw-core
 !modules/acore

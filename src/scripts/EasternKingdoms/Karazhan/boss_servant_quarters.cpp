@@ -42,7 +42,7 @@ class boss_servant_quarters : public CreatureScript
 
         struct boss_servant_quartersAI : public BossAI
         {
-            boss_servant_quartersAI(Creature* creature) : BossAI(creature, TYPE_SERVANT_QUARTERS) { }
+            boss_servant_quartersAI(Creature* creature) : BossAI(creature, DATA_SERVANT_QUARTERS) { }
 
             void Reset()
             {
@@ -59,7 +59,7 @@ class boss_servant_quarters : public CreatureScript
                     me->DespawnOrUnsummon(1);
             }
 
-            void EnterCombat(Unit* who)
+            void EnterCombat(Unit*  /*who*/)
             {
                 me->setActive(true);
                 if (me->GetEntry() == NPC_HYAKISS_THE_LURKER)
@@ -95,7 +95,7 @@ class boss_servant_quarters : public CreatureScript
                 switch (_events2.ExecuteEvent())
                 {
                     case EVENT_CHECK_VISIBILITY:
-                        if (instance->GetBossState(TYPE_SERVANT_QUARTERS) == DONE)
+                        if (instance->GetBossState(DATA_SERVANT_QUARTERS) == DONE)
                         {
                             me->SetVisible(true);
                             me->SetReactState(REACT_AGGRESSIVE);

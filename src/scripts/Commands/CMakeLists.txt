@@ -17,6 +17,7 @@ set(scripts_STAT_SRCS
   Commands/cs_cast.cpp
   Commands/cs_character.cpp
   Commands/cs_debug.cpp
+  Commands/cs_disable.cpp
   Commands/cs_event.cpp
   Commands/cs_gm.cpp
   Commands/cs_go.cpp
@@ -30,6 +31,7 @@ set(scripts_STAT_SRCS
   Commands/cs_lookup.cpp
   Commands/cs_message.cpp
   Commands/cs_misc.cpp
+  Commands/cs_mmaps.cpp
   Commands/cs_modify.cpp
   Commands/cs_npc.cpp
   Commands/cs_quest.cpp

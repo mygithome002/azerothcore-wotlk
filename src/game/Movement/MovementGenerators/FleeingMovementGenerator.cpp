@@ -12,6 +12,7 @@
 #include "MoveSplineInit.h"
 #include "MoveSpline.h"
 #include "Player.h"
+#include "VMapFactory.h"
 
 #define MIN_QUIET_DISTANCE 28.0f
 #define MAX_QUIET_DISTANCE 43.0f
@@ -32,6 +33,19 @@ void FleeingMovementGenerator<T>::_setTargetLocation(T* owner)
     if (!_getPoint(owner, x, y, z))
         return;
 
+    // Add LOS check for target point
+    bool isInLOS = VMAP::VMapFactory::createOrGetVMapManager()->isInLineOfSight(owner->GetMapId(),
+        owner->GetPositionX(),
+        owner->GetPositionY(),
+        owner->GetPositionZ() + 2.0f,
+        x, y, z + 2.0f);
+
+    if (!isInLOS)
+    {
+        i_nextCheckTime.Reset(500);
+        return;
+    }
+
     owner->AddUnitState(UNIT_STATE_FLEEING_MOVE);
 
     Movement::MoveSplineInit init(owner);
@@ -43,7 +57,7 @@ void FleeingMovementGenerator<T>::_setTargetLocation(T* owner)
 template<class T>
 bool FleeingMovementGenerator<T>::_getPoint(T* owner, float &x, float &y, float &z)
 {
-    if (!&owner)
+    if (!owner)
         return false;
 
     x = owner->GetPositionX();
@@ -304,7 +318,7 @@ void FleeingMovementGenerator<T>::DoInitialize(T* owner)
 template<>
 void FleeingMovementGenerator<Creature>::_Init(Creature* owner)
 {
-    if (!&owner)
+    if (!owner)
         return;
 
     //owner->SetTargetGuid(ObjectGuid());

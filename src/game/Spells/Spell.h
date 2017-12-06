@@ -404,12 +404,16 @@ class Spell
         SpellCastResult CheckCast(bool strict);
         SpellCastResult CheckPetCast(Unit* target);
 
+		static uint32 GetCCDelay(SpellInfo const* _spell);
+
         // handlers
         void handle_immediate();
         uint64 handle_delayed(uint64 t_offset);
         // handler helpers
         void _handle_immediate_phase();
         void _handle_finish_phase();
+    
+        void OnSpellLaunch();
 
         SpellCastResult CheckItems();
         SpellCastResult CheckSpellFocus();
@@ -506,7 +510,7 @@ class Spell
         void CleanupTargetList();
 
         void SetSpellValue(SpellValueMod mod, int32 value);
-        SpellValue const* const GetSpellValue() { return m_spellValue; }
+        SpellValue const* GetSpellValue() { return m_spellValue; }
 
         // xinef: moved to public
         void LoadScripts();
