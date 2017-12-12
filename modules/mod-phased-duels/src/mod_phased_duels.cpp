@@ -131,5 +131,5 @@ public:
 void AddPhasedDuelsScripts()
 {
 	new PhasedDuelsWorld();
-    new PhasedDueling();
+        new PhasedDueling();
 }
