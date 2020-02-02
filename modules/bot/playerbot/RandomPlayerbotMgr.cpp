@@ -62,7 +62,6 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 elapsed)
 
 	if (botCount < maxAllowedBotCount)
 		AddRandomBots();
-
     int botProcessed = 0;
     for (list<uint32>::iterator i = bots.begin(); i != bots.end(); ++i)
     {

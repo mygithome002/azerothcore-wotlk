@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: http://github.com/azerothcore/azerothcore-wotlk/LICENSE-GPL2
+ * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  */
@@ -41,6 +41,10 @@
 #include "WorldPacket.h"
 
 #include "Transport.h"
+
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 TrainerSpell const* TrainerSpellData::Find(uint32 spell_id) const
 {
@@ -211,6 +215,9 @@ void Creature::AddToWorld()
         AIM_Initialize();
         if (IsVehicle())
             GetVehicleKit()->Install();
+#ifdef ELUNA
+        sEluna->OnAddToWorld(this);
+#endif
     }
 }
 
@@ -218,6 +225,9 @@ void Creature::RemoveFromWorld()
 { 
     if (IsInWorld())
     {
+#ifdef ELUNA
+        sEluna->OnRemoveFromWorld(this);
+#endif
         if (GetZoneScript())
             GetZoneScript()->OnCreatureRemove(this);
         if (m_formation)
@@ -1171,6 +1181,8 @@ void Creature::SelectLevel(bool changelevel)
 
     SetModifierValue(UNIT_MOD_ATTACK_POWER, BASE_VALUE, cInfo->attackpower);
     SetModifierValue(UNIT_MOD_ATTACK_POWER_RANGED, BASE_VALUE, cInfo->rangedattackpower);
+
+    sScriptMgr->Creature_SelectLevel(cInfo, this);
 }
 
 float Creature::_GetHealthMod(int32 Rank)
@@ -2699,13 +2711,18 @@ float Creature::GetAggroRange(Unit const* target) const
     // Determines the aggro range for creatures
     // Based on data from wowwiki due to lack of 3.3.5a data
 
+    float aggroRate = sWorld->getRate(RATE_CREATURE_AGGRO);
+    if (aggroRate == 0)
+        return 0.0f;
+
     uint32 targetLevel = target->getLevelForTarget(this);
     uint32 myLevel = getLevelForTarget(target);
     int32 levelDiff = int32(targetLevel) - int32(myLevel);
     
     // The maximum Aggro Radius is capped at 45 yards (25 level difference)
-    if (levelDiff < -25)
-        levelDiff = -25;
+    // Set to 0 or min/max of 20 because with bots aggro > 20 is unfair
+    if (levelDiff < 0) //-15
+        levelDiff = 0; //-25
 
     // The base aggro radius for mob of same level
     float aggroRadius = 20.0f;
@@ -2718,18 +2735,25 @@ float Creature::GetAggroRange(Unit const* target) const
 
     // detected range auras
     aggroRadius += target->GetTotalAuraModifier(SPELL_AURA_MOD_DETECTED_RANGE);
-
+	
     // Just in case, we don't want pets running all over the map
     if (aggroRadius > MAX_AGGRO_RADIUS)
         aggroRadius = MAX_AGGRO_RADIUS;
 
-    // Minimum Aggro Radius for a mob seems to be combat range (5 yards)
+    // "Minimum Aggro Radius for a mob seems to be combat range (5 yards)"
+    if (aggroRadius < 5)
+        aggroRadius = 5;
+
+    // Youfie <Nostalrius> Baron Rivendare
+    if ((GetEntry() == 10440))
+        aggroRadius = 2;
+
     // hunter pets seem to ignore minimum aggro radius so we'll default it a little higher
     float minRange = IsPet() ? 10.0f : 5.0f;
     if (aggroRadius < minRange)
         aggroRadius = minRange;
 
-    return aggroRadius;
+    return (aggroRadius * aggroRate);
 }
 
 void Creature::SetObjectScale(float scale)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: http://github.com/azerothcore/azerothcore-wotlk/LICENSE-GPL2
+ * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  */
@@ -35,6 +35,9 @@
 #include "WardenMac.h"
 #include "SavingSystem.h"
 #include "AccountMgr.h"
+#ifdef ELUNA
+#include "LuaEngine.h"
+#endif
 
 // Playerbot mod:
 #include "../../modules/bot/playerbot/playerbot.h"
@@ -213,6 +216,13 @@ void WorldSession::SendPacket(WorldPacket const* packet)
     }
 #endif                                                      // !TRINITY_DEBUG
 
+    sScriptMgr->OnPacketSend(this, *packet);
+
+#ifdef ELUNA
+    if (!sEluna->OnPacketSend(this, *packet))
+        return;
+#endif
+
     if (m_Socket->SendPacket(*packet) == -1)
         m_Socket->CloseSocket();
 }
@@ -290,6 +300,11 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                                     delete movementPacket;
                                     movementPacket = NULL;
                                 }
+                                sScriptMgr->OnPacketReceive(this, *packet);
+#ifdef ELUNA
+                                if (!sEluna->OnPacketReceive(this, *packet))
+                                    break;
+#endif
                                 (this->*opHandle.handler)(*packet);
                             }
 
@@ -306,12 +321,23 @@ bool WorldSession::Update(uint32 diff, PacketFilter& updater)
                                 delete movementPacket;
                                 movementPacket = NULL;
                             }
+                            sScriptMgr->OnPacketReceive(this, *packet);
+#ifdef ELUNA
+                            if (!sEluna->OnPacketReceive(this, *packet))
+                                break;
+#endif
                             (this->*opHandle.handler)(*packet);
                         }
                         break;
                     case STATUS_AUTHED:
                         if (m_inQueue) // prevent cheating
                             break;
+
+                        sScriptMgr->OnPacketReceive(this, *packet);
+#ifdef ELUNA
+                        if (!sEluna->OnPacketReceive(this, *packet))
+                            break;
+#endif
                         (this->*opHandle.handler)(*packet);
                         break;
                     case STATUS_NEVER:

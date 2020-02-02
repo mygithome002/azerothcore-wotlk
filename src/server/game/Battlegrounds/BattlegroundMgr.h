@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: http://github.com/azerothcore/azerothcore-wotlk/LICENSE-GPL2
+ * Copyright (C) 2016+     AzerothCore <www.azerothcore.org>, released under GNU GPL v2 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-GPL2
  * Copyright (C) 2008-2016 TrinityCore <http://www.trinitycore.org/>
  * Copyright (C) 2005-2009 MaNGOS <http://getmangos.com/>
  */
@@ -16,6 +16,8 @@
 
 typedef std::map<uint32, Battleground*> BattlegroundContainer;
 typedef UNORDERED_MAP<uint32, BattlegroundTypeId> BattleMastersMap;
+
+#define BATTLEGROUND_ARENA_POINT_DISTRIBUTION_DAY 86400 // how many seconds in day
 
 struct CreateBattlegroundData
 {
@@ -146,6 +148,7 @@ class BattlegroundMgr
         bool   m_Testing;
         uint32 m_lastClientVisibleInstanceId;
         time_t m_NextAutoDistributionTime;
+        uint32 m_AutoDistributionTimeChecker;
         uint32 m_NextPeriodicQueueUpdateTime;
         BattleMastersMap mBattleMastersMap;
 };

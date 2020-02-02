@@ -33,7 +33,7 @@ class Field
             #ifdef TRINITY_DEBUG
             if (!IsType(MYSQL_TYPE_TINY))
             {
-                sLog->outSQLDriver("Warning: GetUInt8() on non-tinyint field. Using type: %s.", FieldTypeToString(data.type));
+                //sLog->outSQLDriver("Warning: GetUInt8() on non-tinyint field. Using type: %s.", FieldTypeToString(data.type));
                 return 0;
             }
             #endif
@@ -51,7 +51,7 @@ class Field
             #ifdef TRINITY_DEBUG
             if (!IsType(MYSQL_TYPE_TINY))
             {
-                sLog->outSQLDriver("Warning: GetInt8() on non-tinyint field. Using type: %s.", FieldTypeToString(data.type));
+                //sLog->outSQLDriver("Warning: GetInt8() on non-tinyint field. Using type: %s.", FieldTypeToString(data.type));
                 return 0;
             }
             #endif
@@ -61,6 +61,13 @@ class Field
             return static_cast<int8>(atol((char*)data.value));
         }
 
+#ifdef ELUNA
+        enum_field_types GetType() const
+        {
+            return data.type;
+        }
+#endif
+
         uint16 GetUInt16() const
         {
             if (!data.value)
@@ -69,7 +76,7 @@ class Field
             #ifdef TRINITY_DEBUG
             if (!IsType(MYSQL_TYPE_SHORT) && !IsType(MYSQL_TYPE_YEAR))
             {
-                sLog->outSQLDriver("Warning: GetUInt16() on non-smallint field. Using type: %s.", FieldTypeToString(data.type));
+                //sLog->outSQLDriver("Warning: GetUInt16() on non-smallint field. Using type: %s.", FieldTypeToString(data.type));
                 return 0;
             }
             #endif
@@ -87,7 +94,7 @@ class Field
             #ifdef TRINITY_DEBUG
             if (!IsType(MYSQL_TYPE_SHORT) && !IsType(MYSQL_TYPE_YEAR))
             {
-                sLog->outSQLDriver("Warning: GetInt16() on non-smallint field. Using type: %s.", FieldTypeToString(data.type));
+                //sLog->outSQLDriver("Warning: GetInt16() on non-smallint field. Using type: %s.", FieldTypeToString(data.type));
                 return 0;
             }
             #endif
