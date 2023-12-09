@@ -18,7 +18,6 @@
 #include "OutdoorPvP.h"
 #include "CellImpl.h"
 #include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Map.h"
 #include "MapMgr.h"
@@ -323,6 +322,23 @@ bool OPvPCapturePoint::Update(uint32 diff)
     float fact_diff = ((float)m_activePlayers[0].size() - (float)m_activePlayers[1].size()) * diff / OUTDOORPVP_OBJECTIVE_UPDATE_INTERVAL;
     if (!fact_diff)
         return false;
+
+    //npcbots - count bots as players but 2 times less affect and only if there is a players difference
+    uint32 botsCount[2];
+
+    for (uint8 team = 0; team != 2; ++team)
+    {
+        botsCount[team] = 0;
+
+        for (GuidSet::iterator itr = m_activePlayers[team].begin(); itr != m_activePlayers[team].end(); ++itr)
+        {
+            if (Player* player = ObjectAccessor::FindPlayer(*itr))
+                botsCount[team] += player->GetNpcBotsCount();
+        }
+    }
+
+    fact_diff += 0.5f * ((float)botsCount[0] - (float)botsCount[1]) * diff / OUTDOORPVP_OBJECTIVE_UPDATE_INTERVAL;
+    //end npcbot
 
     TeamId ChallengerId = TEAM_NEUTRAL;
     float maxDiff = m_maxSpeed * diff;

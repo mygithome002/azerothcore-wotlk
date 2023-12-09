@@ -15,13 +15,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* ScriptData
-Name: npc_commandscript
-%Complete: 100
-Comment: All npc related commands
-Category: commandscripts
-EndScriptData */
-
 #include "Chat.h"
 #include "CreatureAI.h"
 #include "CreatureGroups.h"
@@ -213,6 +206,16 @@ public:
         if (!sObjectMgr->GetCreatureTemplate(id))
             return false;
 
+        //npcbot
+        CreatureTemplate const* cinfo = sObjectMgr->GetCreatureTemplate(id);
+        if (cinfo && cinfo->IsNPCBotOrPet())
+        {
+            handler->PSendSysMessage("You tried to spawn creature %u, which is part of NPCBots mod. To spawn bots use '.npcbot spawn' instead.", uint32(id));
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+        //end npcbot
+
         Player* chr = handler->GetSession()->GetPlayer();
         float x = chr->GetPositionX();
         float y = chr->GetPositionY();
@@ -396,6 +399,15 @@ public:
             handler->SetSentErrorMessage(true);
             return false;
         }
+
+        //npcbot
+        if (unit->IsNPCBotOrPet())
+        {
+            handler->SendSysMessage("Selected creature has botAI assigned, use '.npcbot delete' instead");
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+        //end npcbot
 
         // Delete the creature
         unit->CombatStop();
@@ -719,7 +731,7 @@ public:
                 if (!creatureTemplate)
                     continue;
 
-                handler->PSendSysMessage(LANG_CREATURE_LIST_CHAT, guid, guid, creatureTemplate->Name.c_str(), x, y, z, mapId, "", "");
+                handler->PSendSysMessage(LANG_CREATURE_LIST_CHAT, guid, entry, guid, creatureTemplate->Name.c_str(), x, y, z, mapId, "", "");
 
                 ++count;
             } while (result->NextRow());
@@ -754,6 +766,17 @@ public:
             handler->SetSentErrorMessage(true);
             return false;
         }
+
+        //npcbot
+        CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(creature->GetEntry());
+        ASSERT(ct);
+        if (ct->IsNPCBotOrPet())
+        {
+            handler->PSendSysMessage("creature %u (id %u) is a part of NPCBots mod. Use '.npcbot move' instead", lowguid, creature->GetEntry());
+            handler->SetSentErrorMessage(true);
+            return false;
+        }
+        //end npcbot
 
         float x = handler->GetSession()->GetPlayer()->GetPositionX();
         float y = handler->GetSession()->GetPlayer()->GetPositionY();

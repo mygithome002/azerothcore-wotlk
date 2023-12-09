@@ -1724,7 +1724,10 @@ void GameObject::Use(Unit* user)
                     player->SendCinematicStart(info->camera.cinematicId);
 
                 if (info->camera.eventID)
+                {
                     GetMap()->ScriptsStart(sEventScripts, info->camera.eventID, player, this);
+                    EventInform(info->camera.eventID);
+                }
 
                 return;
             }
@@ -1925,6 +1928,20 @@ void GameObject::Use(Unit* user)
 
         case GAMEOBJECT_TYPE_FLAGSTAND:                     // 24
             {
+                //npcbot
+                if (user->IsNPCBot())
+                {
+                    Creature* bot = user->ToCreature();
+                    if (Battleground* botbg = bot->GetBotBG())
+                    {
+                        bot->RemoveAurasByType(SPELL_AURA_MOD_STEALTH);
+                        bot->RemoveAurasByType(SPELL_AURA_MOD_INVISIBILITY);
+                        botbg->EventBotClickedOnFlag(bot, this);
+                        return;
+                    }
+                }
+                //end npcbot
+
                 if (user->GetTypeId() != TYPEID_PLAYER)
                     return;
 
@@ -1969,6 +1986,38 @@ void GameObject::Use(Unit* user)
 
         case GAMEOBJECT_TYPE_FLAGDROP:                      // 26
             {
+                //npcbot
+                if (user->IsNPCBot())
+                {
+                    Creature* bot = user->ToCreature();
+                    if (Battleground* botbg = bot->GetBotBG())
+                    {
+                        bot->RemoveAurasByType(SPELL_AURA_MOD_STEALTH);
+                        bot->RemoveAurasByType(SPELL_AURA_MOD_INVISIBILITY);
+
+                        if (GameObjectTemplate const* bgoinfo = GetGOInfo())
+                        {
+                            switch (bgoinfo->entry)
+                            {
+                                case 179785:                        // Silverwing Flag
+                                case 179786:                        // Warsong Flag
+                                    if (botbg->GetBgTypeID(true) == BATTLEGROUND_WS)
+                                        botbg->EventBotClickedOnFlag(bot, this);
+                                    break;
+                                case 184142:                        // Netherstorm Flag
+                                    if (botbg->GetBgTypeID(true) == BATTLEGROUND_EY)
+                                        botbg->EventBotClickedOnFlag(bot, this);
+                                    break;
+                            }
+                        }
+                        //this cause to call return, all flags must be deleted here!!
+                        spellId = 0;
+                        Delete();
+                        break;
+                    }
+                }
+                //end npcbot
+
                 if (user->GetTypeId() != TYPEID_PLAYER)
                     return;
 
@@ -2276,7 +2325,14 @@ void GameObject::ModifyHealth(int32 change, Unit* attackerOrHealer /*= nullptr*/
     if (!IsDestructibleBuilding())
         return;
 
-    if (!m_goValue.Building.MaxHealth || !change)
+    // if this building doesn't have health, return
+    if (!m_goValue.Building.MaxHealth)
+        return;
+
+    sScriptMgr->OnGameObjectModifyHealth(this, attackerOrHealer, change, sSpellMgr->GetSpellInfo(spellId));
+
+    // if the health isn't being changed, return
+    if (!change)
         return;
 
     if (!m_allowModifyDestructibleBuilding)

@@ -43,18 +43,20 @@
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
-#include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "SpellScript.h"
 #include "Transport.h"
 #include "Unit.h"
-#include "UpdateMask.h"
 #include "Util.h"
 #include "Vehicle.h"
 #include "World.h"
 #include "StringConvert.h"
 #include "Tokenize.h"
 #include <boost/algorithm/string.hpp>
+
+//npcbot
+#include "botdatamgr.h"
+//end npcbot
 
 ScriptMapMap sSpellScripts;
 ScriptMapMap sEventScripts;
@@ -491,7 +493,7 @@ void ObjectMgr::LoadGossipMenuItemsLocales()
     {
         Field* fields = result->Fetch();
 
-        uint16 MenuID = fields[0].Get<uint16>();
+        uint32 MenuID = fields[0].Get<uint32>();
         uint16 OptionID = fields[1].Get<uint16>();
 
         LocaleConstant locale = GetLocaleByName(fields[2].Get<std::string>());
@@ -1286,6 +1288,11 @@ void ObjectMgr::CheckCreatureTemplate(CreatureTemplate const* cInfo)
         LOG_ERROR("sql.sql", "Table `creature_template` lists creature (Entry: {}) with expansion {}. Ignored and set to 0.", cInfo->Entry, cInfo->expansion);
         const_cast<CreatureTemplate*>(cInfo)->expansion = 0;
     }
+
+    //npcbot: skip flags check and damage multiplier
+    if (cInfo->IsNPCBotOrPet())
+        return;
+    //end npcbot
 
     if (uint32 badFlags = (cInfo->flags_extra & ~CREATURE_FLAG_EXTRA_DB_ALLOWED))
     {
@@ -2865,47 +2872,43 @@ void ObjectMgr::LoadItemTemplates()
 
         if (dbcitem)
         {
-            if (itemTemplate.Class != dbcitem->ClassID)
+            if (enforceDBCAttributes)
             {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong Class value ({}), must be ({}).", entry, itemTemplate.Class, dbcitem->ClassID);
-                if (enforceDBCAttributes)
+                if (itemTemplate.Class != dbcitem->ClassID)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong Class value ({}), must be ({}).", entry, itemTemplate.Class, dbcitem->ClassID);
                     itemTemplate.Class = dbcitem->ClassID;
-            }
-            if (itemTemplate.SubClass != dbcitem->SubclassID)
-            {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong Subclass value ({}) for class {}, must be ({}).", entry, itemTemplate.SubClass, itemTemplate.Class, dbcitem->SubclassID);
-                if (enforceDBCAttributes)
+                }
+                if (itemTemplate.SubClass != dbcitem->SubclassID)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong Subclass value ({}) for class {}, must be ({}).", entry, itemTemplate.SubClass, itemTemplate.Class, dbcitem->SubclassID);
                     itemTemplate.SubClass = dbcitem->SubclassID;
-            }
-            if (itemTemplate.SoundOverrideSubclass != dbcitem->SoundOverrideSubclassID)
-            {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) does not have a correct SoundOverrideSubclass ({}), must be {}.", entry, itemTemplate.SoundOverrideSubclass);
-                if (enforceDBCAttributes)
+                }
+                if (itemTemplate.SoundOverrideSubclass != dbcitem->SoundOverrideSubclassID)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) does not have a correct SoundOverrideSubclass ({}), must be {}.", entry, itemTemplate.SoundOverrideSubclass, dbcitem->SoundOverrideSubclassID);
                     itemTemplate.SoundOverrideSubclass = dbcitem->SoundOverrideSubclassID;
-            }
-            if (itemTemplate.Material != dbcitem->Material)
-            {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) does not have a correct material ({}), must be {}.", entry, itemTemplate.Material, dbcitem->Material);
-                if (enforceDBCAttributes)
+                }
+                if (itemTemplate.Material != dbcitem->Material)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) does not have a correct material ({}), must be {}.", entry, itemTemplate.Material, dbcitem->Material);
                     itemTemplate.Material = dbcitem->Material;
-            }
-            if (itemTemplate.InventoryType != dbcitem->InventoryType)
-            {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong InventoryType value ({}), must be {}.", entry, itemTemplate.InventoryType, dbcitem->InventoryType);
-                if (enforceDBCAttributes)
+                }
+                if (itemTemplate.InventoryType != dbcitem->InventoryType)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong InventoryType value ({}), must be {}.", entry, itemTemplate.InventoryType, dbcitem->InventoryType);
                     itemTemplate.InventoryType = dbcitem->InventoryType;
-            }
-            if (itemTemplate.DisplayInfoID != dbcitem->DisplayInfoID)
-            {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) does not have a correct display id ({}), must be {}.", entry, itemTemplate.DisplayInfoID, dbcitem->DisplayInfoID);
-                if (enforceDBCAttributes)
+                }
+                if (itemTemplate.DisplayInfoID != dbcitem->DisplayInfoID)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) does not have a correct display id ({}), must be {}.", entry, itemTemplate.DisplayInfoID, dbcitem->DisplayInfoID);
                     itemTemplate.DisplayInfoID = dbcitem->DisplayInfoID;
-            }
-            if (itemTemplate.Sheath != dbcitem->SheatheType)
-            {
-                LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong Sheath ({}), must be {}.", entry, itemTemplate.Sheath, dbcitem->SheatheType);
-                if (enforceDBCAttributes)
+                }
+                if (itemTemplate.Sheath != dbcitem->SheatheType)
+                {
+                    LOG_ERROR("sql.sql", "Item (Entry: {}) has wrong Sheath ({}), must be {}.", entry, itemTemplate.Sheath, dbcitem->SheatheType);
                     itemTemplate.Sheath = dbcitem->SheatheType;
+                }
             }
         }
         else
@@ -4064,88 +4067,6 @@ void ObjectMgr::LoadPlayerInfo()
         }
     }
 
-    // Loading levels data (class only dependent)
-    LOG_INFO("server.loading", "Loading Player Create Level HP/Mana Data...");
-    {
-        uint32 oldMSTime = getMSTime();
-
-        //                                                0      1      2       3
-        QueryResult result  = WorldDatabase.Query("SELECT class, level, basehp, basemana FROM player_classlevelstats");
-
-        if (!result)
-        {
-            LOG_FATAL("server.loading", ">> Loaded 0 level health/mana definitions. DB table `player_classlevelstats` is empty.");
-            exit(1);
-        }
-
-        uint32 count = 0;
-
-        do
-        {
-            Field* fields = result->Fetch();
-
-            uint32 current_class = fields[0].Get<uint8>();
-            if (current_class >= MAX_CLASSES)
-            {
-                LOG_ERROR("sql.sql", "Wrong class {} in `player_classlevelstats` table, ignoring.", current_class);
-                continue;
-            }
-
-            uint8 current_level = fields[1].Get<uint8>();      // Can't be > than STRONG_MAX_LEVEL (hardcoded level maximum) due to var type
-            if (current_level > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
-            {
-                LOG_INFO("sql.sql", "Unused (> MaxPlayerLevel in worldserver.conf) level {} in `player_classlevelstats` table, ignoring.", current_level);
-                ++count;                                    // make result loading percent "expected" correct in case disabled detail mode for example.
-                continue;
-            }
-
-            PlayerClassInfo* info = _playerClassInfo[current_class];
-            if (!info)
-            {
-                info = new PlayerClassInfo();
-                info->levelInfo = new PlayerClassLevelInfo[sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)];
-                _playerClassInfo[current_class] = info;
-            }
-
-            PlayerClassLevelInfo& levelInfo = info->levelInfo[current_level - 1];
-
-            levelInfo.basehealth = fields[2].Get<uint32>();
-            levelInfo.basemana   = fields[3].Get<uint32>();
-
-            ++count;
-        } while (result->NextRow());
-
-        // Fill gaps and check integrity
-        for (int class_ = 0; class_ < MAX_CLASSES; ++class_)
-        {
-            // skip non existed classes
-            if (!sChrClassesStore.LookupEntry(class_))
-                continue;
-
-            PlayerClassInfo* pClassInfo = _playerClassInfo[class_];
-
-            // fatal error if no initial level data
-            if (!pClassInfo->levelInfo || (pClassInfo->levelInfo[sWorld->getIntConfig(CONFIG_START_PLAYER_LEVEL) - 1].basehealth == 0 && class_ != CLASS_DEATH_KNIGHT) || (pClassInfo->levelInfo[sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) - 1].basehealth == 0 && class_ == CLASS_DEATH_KNIGHT))
-            {
-                LOG_ERROR("sql.sql", "Class {} initial level does not have health/mana data!", class_);
-                exit(1);
-            }
-
-            // fill level gaps
-            for (uint8 level = 1; level < sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL); ++level)
-            {
-                if ((pClassInfo->levelInfo[level].basehealth == 0 && class_ != CLASS_DEATH_KNIGHT) || (level >= sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) && pClassInfo->levelInfo[level].basehealth == 0 && class_ == CLASS_DEATH_KNIGHT))
-                {
-                    LOG_ERROR("sql.sql", "Class {} level {} does not have health/mana data. Using stats data of level {}.", class_, level + 1, level);
-                    pClassInfo->levelInfo[level] = pClassInfo->levelInfo[level - 1];
-                }
-            }
-        }
-
-        LOG_INFO("server.loading", ">> Loaded {} Level Health/Mana Definitions in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
-        LOG_INFO("server.loading", " ");
-    }
-
     // Loading levels data (class/race dependent)
     LOG_INFO("server.loading", "Loading Player Create Level Stats Data...");
     {
@@ -4184,8 +4105,8 @@ void ObjectMgr::LoadPlayerInfo()
 
         } while (raceStatsResult->NextRow());
 
-        //                                                 0      1       2         3        4         5        6
-        QueryResult result = WorldDatabase.Query("SELECT Class, Level, Strength, Agility, Stamina, Intellect, Spirit FROM player_class_stats");
+        //                                                 0      1       2         3        4         5        6       7        8
+        QueryResult result = WorldDatabase.Query("SELECT Class, Level, Strength, Agility, Stamina, Intellect, Spirit, BaseHP, BaseMana FROM player_class_stats");
 
         if (!result)
         {
@@ -4209,7 +4130,7 @@ void ObjectMgr::LoadPlayerInfo()
             uint32 current_level = fields[1].Get<uint8>();
             if (current_level > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
             {
-                if (current_level > STRONG_MAX_LEVEL)        // hardcoded level maximum
+                if (current_level > STRONG_MAX_LEVEL) // hardcoded level maximum
                     LOG_ERROR("sql.sql", "Wrong (> {}) level {} in `player_class_stats` table, ignoring.", STRONG_MAX_LEVEL, current_level);
                 else
                     LOG_DEBUG("sql.sql", "Unused (> MaxPlayerLevel in worldserver.conf) level {} in `player_class_stats` table, ignoring.", current_level);
@@ -4230,6 +4151,19 @@ void ObjectMgr::LoadPlayerInfo()
                 }
             }
 
+            PlayerClassInfo* info = _playerClassInfo[current_class];
+            if (!info)
+            {
+                info = new PlayerClassInfo();
+                info->levelInfo = new PlayerClassLevelInfo[sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)];
+                _playerClassInfo[current_class] = info;
+            }
+
+            PlayerClassLevelInfo& levelInfo = info->levelInfo[current_level - 1];
+
+            levelInfo.basehealth = fields[7].Get<uint32>();
+            levelInfo.basemana = fields[8].Get<uint32>();
+
             ++count;
         } while (result->NextRow());
 
@@ -4246,6 +4180,7 @@ void ObjectMgr::LoadPlayerInfo()
                 if (!sChrClassesStore.LookupEntry(class_))
                     continue;
 
+                PlayerClassInfo* pClassInfo = _playerClassInfo[class_];
                 PlayerInfo* info = _playerInfo[race][class_];
                 if (!info)
                     continue;
@@ -4258,20 +4193,37 @@ void ObjectMgr::LoadPlayerInfo()
                 if (sWorld->getIntConfig(CONFIG_EXPANSION) < EXPANSION_WRATH_OF_THE_LICH_KING && class_ == CLASS_DEATH_KNIGHT)
                     continue;
 
-                // fatal error if no initial level data
+                // fatal error if no initial stats data
                 if (!info->levelInfo || (info->levelInfo[sWorld->getIntConfig(CONFIG_START_PLAYER_LEVEL) - 1].stats[0] == 0 && class_ != CLASS_DEATH_KNIGHT) || (info->levelInfo[sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) - 1].stats[0] == 0 && class_ == CLASS_DEATH_KNIGHT))
                 {
                     LOG_ERROR("sql.sql", "Race {} class {} initial level does not have stats data!", race, class_);
                     exit(1);
                 }
 
-                // fill level gaps
+                // fatal error if no initial health/mana data
+                if (!pClassInfo->levelInfo || (pClassInfo->levelInfo[sWorld->getIntConfig(CONFIG_START_PLAYER_LEVEL) - 1].basehealth == 0 && class_ != CLASS_DEATH_KNIGHT) || (pClassInfo->levelInfo[sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) - 1].basehealth == 0 && class_ == CLASS_DEATH_KNIGHT))
+                {
+                    LOG_ERROR("sql.sql", "Class {} initial level does not have health/mana data!", class_);
+                    exit(1);
+                }
+
+                // fill level gaps for stats
                 for (uint8 level = 1; level < sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL); ++level)
                 {
                     if ((info->levelInfo[level].stats[0] == 0 && class_ != CLASS_DEATH_KNIGHT) || (level >= sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) && info->levelInfo[level].stats[0] == 0 && class_ == CLASS_DEATH_KNIGHT))
                     {
                         LOG_ERROR("sql.sql", "Race {} class {} level {} does not have stats data. Using stats data of level {}.", race, class_, level + 1, level);
                         info->levelInfo[level] = info->levelInfo[level - 1];
+                    }
+                }
+
+                // fill level gaps for health/mana
+                for (uint8 level = 1; level < sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL); ++level)
+                {
+                    if ((pClassInfo->levelInfo[level].basehealth == 0 && class_ != CLASS_DEATH_KNIGHT) || (level >= sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL) && pClassInfo->levelInfo[level].basehealth == 0 && class_ == CLASS_DEATH_KNIGHT))
+                    {
+                        LOG_ERROR("sql.sql", "Class {} level {} does not have health/mana data. Using stats data of level {}.", class_, level + 1, level);
+                        pClassInfo->levelInfo[level] = pClassInfo->levelInfo[level - 1];
                     }
                 }
             }
@@ -8789,6 +8741,82 @@ SkillRangeType GetSkillRangeType(SkillRaceClassInfoEntry const* rcEntry)
     return SKILL_RANGE_LEVEL;
 }
 
+void ObjectMgr::LoadCreatureOutfits()
+{
+    uint32 oldMSTime = getMSTime();
+
+    _creatureOutfitStore.clear();                           // for reload case (test only)
+
+    //                                                 0     1      2      3     4     5       6           7
+    QueryResult result = WorldDatabase.Query("SELECT entry, race, gender, skin, face, hair, haircolor, facialhair, "
+        //8       9        10    11     12     13    14     15     16     17     18
+        "head, shoulders, body, chest, waist, legs, feet, wrists, hands, back, tabard FROM creature_template_outfits");
+
+    if (!result)
+    {
+        LOG_ERROR("server.loading", ">> Loaded 0 creature outfits. DB table `creature_template_outfits` is empty!");
+        return;
+    }
+
+    uint32 count = 0;
+
+    do
+    {
+        Field* fields = result->Fetch();
+
+        uint32 i = 0;
+        uint32 entry     = fields[i++].Get<uint32>();
+
+        if (!GetCreatureTemplate(entry))
+        {
+            LOG_ERROR("server.loading", ">> Creature entry {} in `creature_template_outfits`, but not in `creature_template`!", entry);
+            continue;
+        }
+
+        CreatureOutfit co; // const, shouldnt be changed after saving
+        co.race          = fields[i++].Get<uint8>();
+        ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(co.race);
+        if (!rEntry)
+        {
+            LOG_ERROR("server.loading", ">> Creature entry {} in `creature_template_outfits` has incorrect race ({}).", entry, uint32(co.race));
+            continue;
+        }
+        co.gender        = fields[i++].Get<uint8>();
+        // Set correct displayId
+        switch (co.gender)
+        {
+            case GENDER_FEMALE:
+                _creatureTemplateStore[entry].Modelid1 = rEntry->model_f;
+                break;
+            case GENDER_MALE:
+                _creatureTemplateStore[entry].Modelid1 = rEntry->model_m;
+                break;
+            default:
+                LOG_ERROR("server.loading", ">> Creature entry {} in `creature_template_outfits` has invalid gender {}", entry, uint32(co.gender));
+                continue;
+        }
+        _creatureTemplateStore[entry].Modelid2 = 0;
+        _creatureTemplateStore[entry].Modelid3 = 0;
+        _creatureTemplateStore[entry].Modelid4 = 0;
+        _creatureTemplateStore[entry].unit_flags2 |= UNIT_FLAG2_MIRROR_IMAGE; // Needed so client requests mirror packet
+
+        co.skin          = fields[i++].Get<uint8>();
+        co.face          = fields[i++].Get<uint8>();
+        co.hair          = fields[i++].Get<uint8>();
+        co.haircolor     = fields[i++].Get<uint8>();
+        co.facialhair    = fields[i++].Get<uint8>();
+        for (uint32 j = 0; j != MAX_CREATURE_OUTFIT_DISPLAYS; ++j)
+            co.outfit[j] = fields[i+j].Get<uint32>();
+
+        _creatureOutfitStore[entry] = co;
+
+        ++count;
+    }
+    while (result->NextRow());
+
+    LOG_INFO("server.loading", ">> Loaded {} creature outfits in {} ms", count, GetMSTimeDiffToNow(oldMSTime));
+}
+
 void ObjectMgr::LoadGameTele()
 {
     uint32 oldMSTime = getMSTime();
@@ -9226,7 +9254,7 @@ void ObjectMgr::LoadGossipMenu()
 
         GossipMenus gMenu;
 
-        gMenu.MenuID        = fields[0].Get<uint16>();
+        gMenu.MenuID        = fields[0].Get<uint32>();
         gMenu.TextID        = fields[1].Get<uint32>();
 
         if (!GetGossipText(gMenu.TextID))
@@ -9266,7 +9294,7 @@ void ObjectMgr::LoadGossipMenuItems()
 
         GossipMenuItems gMenuItem;
 
-        gMenuItem.MenuID                    = fields[0].Get<uint16>();
+        gMenuItem.MenuID                    = fields[0].Get<uint32>();
         gMenuItem.OptionID                  = fields[1].Get<uint16>();
         gMenuItem.OptionIcon                = fields[2].Get<uint32>();
         gMenuItem.OptionText                = fields[3].Get<std::string>();
@@ -9987,6 +10015,18 @@ GameObjectTemplateAddon const* ObjectMgr::GetGameObjectTemplateAddon(uint32 entr
 
 CreatureTemplate const* ObjectMgr::GetCreatureTemplate(uint32 entry)
 {
+    //npcbot: try fetch custom creature template
+    if (entry >= BOT_ENTRY_CREATE_BEGIN)
+    {
+        if (CreatureTemplate const* extra_template = BotDataMgr::GetBotExtraCreatureTemplate(entry))
+        {
+            //custom creature template should only exist in custom container
+            ASSERT_NODEBUGINFO(_creatureTemplateStore.find(entry) == _creatureTemplateStore.end());
+            return extra_template;
+        }
+    }
+    //end npcbot
+
     return entry < _creatureTemplateStoreFast.size() ? _creatureTemplateStoreFast[entry] : nullptr;
 }
 

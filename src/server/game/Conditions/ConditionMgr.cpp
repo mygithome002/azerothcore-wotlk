@@ -29,6 +29,10 @@
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 
+//npcbot
+#include "bot_ai.h"
+//end npcbot
+
 // Checks if object meets the condition
 // Can have CONDITION_SOURCE_TYPE_NONE && !mReferenceId if called from a special event (ie: eventAI)
 bool Condition::Meets(ConditionSourceInfo& sourceInfo)
@@ -63,6 +67,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot())
+                condMeets = true;
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 // don't allow 0 items (it's checked during table load)
@@ -77,6 +86,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot())
+                condMeets = true; //for now
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 condMeets = player->HasItemOrGemWithIdEquipped(ConditionValue1, 1);
@@ -91,6 +105,14 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot() && object->ToCreature()->GetBotAI() && !object->ToCreature()->IsFreeBot())
+            {
+                if (FactionEntry const* faction = sFactionStore.LookupEntry(ConditionValue1))
+                   condMeets = (ConditionValue2 & (1 << object->ToCreature()->GetBotOwner()->GetReputationMgr().GetRank(faction)));
+            }
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 if (FactionEntry const* faction = sFactionStore.LookupEntry(ConditionValue1))
@@ -105,6 +127,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot())
+                condMeets = true;
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 condMeets = player->HasAchieved(ConditionValue1);
@@ -116,6 +143,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot() && object->ToCreature()->GetBotAI() && !object->ToCreature()->IsFreeBot())
+                condMeets = object->ToCreature()->GetBotOwner()->GetTeamId() == ConditionValue1;
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 // Xinef: DB Data compatibility...
@@ -141,6 +173,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot())
+                condMeets = object->ToCreature()->GetGender() == ConditionValue1;
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 condMeets = player->getGender() == ConditionValue1;
@@ -152,6 +189,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->IsNPCBot())
+                condMeets = true;
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 condMeets = player->HasSkill(ConditionValue1) && player->GetBaseSkillValue(ConditionValue1) >= ConditionValue2;
@@ -258,6 +300,11 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     {
         if (Unit* unit = object->ToUnit())
         {
+            //npcbot
+            if (object->GetTypeId() == TYPEID_UNIT && object->ToCreature()->GetBotAI())
+                condMeets = object->ToCreature()->GetBotAI()->HasSpell(sSpellMgr->GetSpellInfo(ConditionValue1)->GetFirstRankSpell()->Id);
+            else
+            //end npcbot
             if (Player* player = unit->GetCharmerOrOwnerPlayerOrPlayerItself())
             {
                 condMeets = player->HasSpell(ConditionValue1);
@@ -289,8 +336,22 @@ bool Condition::Meets(ConditionSourceInfo& sourceInfo)
     }
     case CONDITION_NEAR_GAMEOBJECT:
     {
-        condMeets = static_cast<bool>(GetClosestGameObjectWithEntry(object, ConditionValue1, static_cast<float>(ConditionValue2)));
-        break;
+        if (!ConditionValue3)
+        {
+            condMeets = static_cast<bool>(GetClosestGameObjectWithEntry(object, ConditionValue1, static_cast<float>(ConditionValue2)));
+            break;
+        }
+        else
+        {
+            if (GameObject* go = GetClosestGameObjectWithEntry(object, ConditionValue1, static_cast<float>(ConditionValue2)))
+            {
+                if ((go->GetGoState() == GO_STATE_READY && ConditionValue3 == 1) || (go->GetGoState() != GO_STATE_READY && ConditionValue3 == 2))
+                    condMeets = true;
+                else
+                    condMeets = false;
+            }
+            break;
+        }
     }
     case CONDITION_OBJECT_ENTRY_GUID:
     {
@@ -2124,8 +2185,8 @@ bool ConditionMgr::isConditionTypeValid(Condition* cond)
             LOG_ERROR("sql.sql", "NearGameObject condition has non existing gameobject template entry ({}), skipped", cond->ConditionValue1);
             return false;
         }
-        if (cond->ConditionValue3)
-            LOG_ERROR("sql.sql", "NearGameObject condition has useless data in value3 ({})!", cond->ConditionValue3);
+        if (cond->ConditionValue3 > 2)
+            LOG_ERROR("sql.sql", "NearGameObject condition for gameobject ID ({}) has data over 2 for value3 ({})!", cond->ConditionValue1, cond->ConditionValue3);
         break;
     }
     case CONDITION_OBJECT_ENTRY_GUID:

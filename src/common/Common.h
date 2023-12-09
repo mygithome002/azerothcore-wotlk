@@ -41,13 +41,6 @@
 #include <unistd.h>
 #endif
 
-#if AC_COMPILER == AC_COMPILER_MICROSOFT
-#define atoll _atoi64
-#define llabs _abs64
-#else
-#define stricmp strcasecmp
-#endif
-
 #define STRINGIZE(a) #a
 
 #define MAX_NETCLIENT_PACKET_SIZE (32767 - 1)               // Client hardcap: int16 with trailing zero space otherwise crash on memory free
@@ -70,7 +63,7 @@ enum AccountTypes
     SEC_CONSOLE        = 4                                  // must be always last in list, accounts must have less security level always also
 };
 
-enum LocaleConstant
+enum LocaleConstant : uint8
 {
     LOCALE_enUS = 0,
     LOCALE_koKR = 1,

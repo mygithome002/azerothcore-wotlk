@@ -29,6 +29,10 @@
 #include "SpellScript.h"
 #include "UnitAI.h"
 
+//npcbot
+#include "Creature.h"
+//end npcbot
+
 enum PaladinSpells
 {
     SPELL_PALADIN_DIVINE_PLEA                    = 54428,
@@ -79,6 +83,12 @@ enum PaladinSpells
     SPELL_PALADIN_IMPROVED_DEVOTION_AURA         = 63514,
     SPELL_PALADIN_SANCTIFIED_RETRIBUTION_AURA    = 63531,
     SPELL_PALADIN_AURA_MASTERY_IMMUNE            = 64364,
+
+    SPELL_JUDGEMENTS_OF_THE_JUST                 = 68055,
+    SPELL_JUDGEMENT_OF_VENGEANCE_EFFECT          = 31804,
+    SPELL_HOLY_VENGEANCE                         = 31803,
+    SPELL_JUDGEMENT_OF_CORRUPTION_EFFECT         = 53733,
+    SPELL_BLOOD_CORRUPTION                       = 53742,
 
     SPELL_GENERIC_ARENA_DAMPENING                = 74410,
     SPELL_GENERIC_BATTLEGROUND_DAMPENING         = 74411
@@ -302,7 +312,8 @@ private:
 
     enum Spell
     {
-        PAL_SPELL_ARDENT_DEFENDER_HEAL = 66235
+        PAL_SPELL_ARDENT_DEFENDER_DEBUFF = 66233,
+        PAL_SPELL_ARDENT_DEFENDER_HEAL   = 66235
     };
 
     bool Validate(SpellInfo const* /*spellInfo*/) override
@@ -314,6 +325,12 @@ private:
     {
         healPct = GetSpellInfo()->Effects[EFFECT_1].CalcValue();
         absorbPct = GetSpellInfo()->Effects[EFFECT_0].CalcValue();
+
+        //npcbot - allow for npcbots
+        if (GetUnitOwner()->IsNPCBot())
+            return true;
+        //end npcbot
+
         return GetUnitOwner()->GetTypeId() == TYPEID_PLAYER;
     }
 
@@ -328,8 +345,41 @@ private:
         Unit* victim = GetTarget();
         int32 remainingHealth = victim->GetHealth() - dmgInfo.GetDamage();
         uint32 allowedHealth = victim->CountPctFromMaxHealth(35);
+
+        //npcbot - calc for bots
+        if (victim->GetTypeId() == TYPEID_UNIT/* && victim->ToCreature()->IsNPCBot()*/)
+        {
+            if (remainingHealth <= 0 && !victim->HasSpellCooldown(PAL_SPELL_ARDENT_DEFENDER_HEAL) &&
+                !victim->ToCreature()->HasSpellCooldown(PAL_SPELL_ARDENT_DEFENDER_HEAL))
+            {
+                // Cast healing spell, completely avoid damage
+                absorbAmount = dmgInfo.GetDamage();
+
+                float defenseSkillValue = victim->GetDefenseSkillValue();
+                // Max heal when defense skill denies critical hits from raid bosses
+                // Formula: max defense at level + 140 (rating from gear)
+                float reqDefForMaxHeal = victim->GetMaxSkillValueForLevel() + 140.0f;
+                float defenseFactor = std::min(1.0f, defenseSkillValue / reqDefForMaxHeal);
+
+                int32 healAmount = int32(victim->CountPctFromMaxHealth(uint32(healPct * defenseFactor)));
+                victim->CastCustomSpell(PAL_SPELL_ARDENT_DEFENDER_HEAL, SPELLVALUE_BASE_POINT0, healAmount, victim, true, nullptr, aurEff);
+                victim->ToCreature()->AddBotSpellCooldown(PAL_SPELL_ARDENT_DEFENDER_HEAL, 120000);
+            }
+            else if (remainingHealth < int32(allowedHealth))
+            {
+                // Reduce damage that brings us under 35% (or full damage if we are already under 35%) by x%
+                uint32 damageToReduce = (victim->GetHealth() < allowedHealth)
+                    ? dmgInfo.GetDamage()
+                    : allowedHealth - remainingHealth;
+                absorbAmount = CalculatePct(damageToReduce, absorbPct);
+            }
+
+            return;
+        }
+        //end npcbot
+
         // If damage kills us
-        if (remainingHealth <= 0 && !victim->ToPlayer()->HasSpellCooldown(PAL_SPELL_ARDENT_DEFENDER_HEAL))
+        if (remainingHealth <= 0 && !victim->ToPlayer()->HasAura(PAL_SPELL_ARDENT_DEFENDER_DEBUFF))
         {
             // Cast healing spell, completely avoid damage
             absorbAmount = dmgInfo.GetDamage();
@@ -344,7 +394,6 @@ private:
 
             int32 healAmount = int32(victim->CountPctFromMaxHealth(uint32(healPct * pctFromDefense)));
             victim->CastCustomSpell(PAL_SPELL_ARDENT_DEFENDER_HEAL, SPELLVALUE_BASE_POINT0, healAmount, victim, true, nullptr, aurEff);
-            victim->ToPlayer()->AddSpellCooldown(PAL_SPELL_ARDENT_DEFENDER_HEAL, 0, 120000);
         }
         else if (remainingHealth < int32(allowedHealth))
         {
@@ -504,6 +553,23 @@ class spell_pal_divine_sacrifice : public AuraScript
     {
         if (Unit* caster = GetCaster())
         {
+            //npcbot: handle for bots
+            if (caster->IsNPCBot())
+            {
+                Player const* owner = caster->ToCreature()->GetBotOwner();
+                if (!owner || owner->GetTypeId() != TYPEID_PLAYER)
+                    return false;
+
+                if (owner->GetGroup())
+                    groupSize = owner->GetGroup()->GetMembersCount();
+                else
+                    groupSize = 1 + owner->GetNpcBotsCount();
+
+                remainingAmount = (caster->CountPctFromMaxHealth(GetSpellInfo()->Effects[EFFECT_2].CalcValue(caster)) * groupSize);
+                minHpPct = GetSpellInfo()->Effects[EFFECT_1].CalcValue(caster);
+                return true;
+            }
+            //end npcbot
             if (caster->GetTypeId() == TYPEID_PLAYER)
             {
                 if (caster->ToPlayer()->GetGroup())
@@ -874,7 +940,26 @@ public:
 
         // Judgement of the Just
         if (GetCaster()->GetAuraEffect(SPELL_AURA_ADD_FLAT_MODIFIER, SPELLFAMILY_PALADIN, 3015, 0))
-            GetCaster()->CastSpell(GetHitUnit(), 68055, true);
+        {
+            if (GetCaster()->CastSpell(GetHitUnit(), SPELL_JUDGEMENTS_OF_THE_JUST, true) && (spellId2 == SPELL_JUDGEMENT_OF_VENGEANCE_EFFECT || spellId2 == SPELL_JUDGEMENT_OF_CORRUPTION_EFFECT))
+            {
+                //hidden effect only cast when spellcast of judgements of the just is succesful
+                GetCaster()->CastSpell(GetHitUnit(), SealApplication(spellId2), true); //add hidden seal apply effect for vengeance and corruption
+            }
+        }
+    }
+
+    uint32 SealApplication(uint32 correspondingSpellId)
+    {
+        switch (correspondingSpellId)
+        {
+            case SPELL_JUDGEMENT_OF_VENGEANCE_EFFECT:
+                return SPELL_HOLY_VENGEANCE;
+            case SPELL_JUDGEMENT_OF_CORRUPTION_EFFECT:
+                return SPELL_BLOOD_CORRUPTION;
+            default:
+                return 0;
+        }
     }
 
     void Register() override
@@ -983,6 +1068,9 @@ class spell_pal_righteous_defense : public SpellScript
     {
         Unit* caster = GetCaster();
         if (caster->GetTypeId() != TYPEID_PLAYER)
+            //npcbot: this player check makes no sense
+            if (!caster->IsNPCBot())
+            //end npcbot
             return SPELL_FAILED_DONT_REPORT;
 
         if (Unit* target = GetExplTargetUnit())

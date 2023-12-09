@@ -82,7 +82,7 @@ protected:
     Creature* DoSummon(uint32 entry, WorldObject* obj, float radius = 5.0f, uint32 despawnTime = 30000, TempSummonType summonType = TEMPSUMMON_CORPSE_TIMED_DESPAWN);
     Creature* DoSummonFlyer(uint32 entry, WorldObject* obj, float flightZ, float radius = 5.0f, uint32 despawnTime = 30000, TempSummonType summonType = TEMPSUMMON_CORPSE_TIMED_DESPAWN);
 public:
-    // EnumUtils: DESCRIBE THIS
+    // EnumUtils: DESCRIBE THIS (in CreatureAI::)
     enum EvadeReason
     {
         EVADE_REASON_NO_HOSTILES,       // the creature's threat list is empty
@@ -140,6 +140,11 @@ public:
 
     // Called when spell hits a target
     virtual void SpellHitTarget(Unit* /*target*/, SpellInfo const* /*spell*/) {}
+
+    //npcbot
+    // Called when a spell starts
+    virtual void OnSpellStart(SpellInfo const* /*spell*/) { }
+    //end npcbot
 
     // Called when the creature is target of hostile action: swing, hostile spell landed, fear/etc)
     virtual void AttackedBy(Unit* /*attacker*/) {}

@@ -276,6 +276,10 @@ public:
         ItemType(0), TriggerSpell(0), ImplicitTargetConditions(nullptr) {}
     SpellEffectInfo(SpellEntry const* spellEntry, SpellInfo const* spellInfo, uint8 effIndex);
 
+    //npcbot
+    void OverrideSpellInfo(SpellInfo const* spellInfo) { ASSERT_NOTNULL(spellInfo); _spellInfo = spellInfo; }
+    //end npcbot
+
     bool IsEffect() const;
     bool IsEffect(SpellEffects effectName) const;
     bool IsAura() const;
@@ -474,7 +478,7 @@ public:
     bool IsAuraExclusiveBySpecificPerCasterWith(SpellInfo const* spellInfo) const;
 
     SpellCastResult CheckShapeshift(uint32 form) const;
-    SpellCastResult CheckLocation(uint32 map_id, uint32 zone_id, uint32 area_id, Player const* player = nullptr, bool strict = true) const;
+    SpellCastResult CheckLocation(uint32 map_id, uint32 zone_id, uint32 area_id, Player* player = nullptr, bool strict = true) const;
     SpellCastResult CheckTarget(Unit const* caster, WorldObject const* target, bool implicit = true) const;
     SpellCastResult CheckExplicitTarget(Unit const* caster, WorldObject const* target, Item const* itemTarget = nullptr) const;
     bool CheckTargetCreatureType(Unit const* target) const;
@@ -523,6 +527,10 @@ public:
 
     std::array<SpellEffectInfo, MAX_SPELL_EFFECTS> const& GetEffects() const { return Effects; }
     SpellEffectInfo const& GetEffect(SpellEffIndex index) const { ASSERT(index < Effects.size()); return Effects[index]; }
+
+    //npcbot
+    SpellInfo const* TryGetSpellInfoOverride(WorldObject const* caster) const;
+    //end npcbot
 
     // loading helpers
     void _InitializeExplicitTargetMask();

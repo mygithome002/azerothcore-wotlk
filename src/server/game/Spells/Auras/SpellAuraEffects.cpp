@@ -22,7 +22,6 @@
 #include "Common.h"
 #include "GameTime.h"
 #include "GridNotifiers.h"
-#include "InstanceScript.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
@@ -382,8 +381,8 @@ pAuraEffectHandler AuraEffectHandler[TOTAL_AURAS] =
 
 AuraEffect::AuraEffect(Aura* base, uint8 effIndex, int32* baseAmount, Unit* caster):
     m_base(base), m_spellInfo(base->GetSpellInfo()),
-    m_baseAmount(baseAmount ? * baseAmount : m_spellInfo->Effects[effIndex].BasePoints), m_critChance(0),
-    m_oldAmount(0), m_isAuraEnabled(true), m_channelData(nullptr), m_spellmod(nullptr), m_periodicTimer(0), m_tickNumber(0), m_effIndex(effIndex),
+    m_baseAmount(baseAmount ? * baseAmount : m_spellInfo->Effects[effIndex].BasePoints), m_dieSides(m_spellInfo->Effects[effIndex].DieSides),
+    m_critChance(0), m_oldAmount(0), m_isAuraEnabled(true), m_channelData(nullptr), m_spellmod(nullptr), m_periodicTimer(0), m_tickNumber(0), m_effIndex(effIndex),
     m_canBeRecalculated(true), m_isPeriodic(false)
 {
     CalculatePeriodic(caster, true, false);
@@ -945,6 +944,21 @@ void AuraEffect::UpdatePeriodic(Unit* caster)
                         case 49472: // Drink Coffee
                         case 57073:
                         case 61830:
+                            //npcbot
+                            if (caster && caster->IsNPCBot())
+                            {
+                                if (AuraEffect* aurEff = GetBase()->GetEffect(EFFECT_0))
+                                {
+                                    if (aurEff->GetAuraType() == SPELL_AURA_MOD_POWER_REGEN)
+                                    {
+                                        aurEff->ChangeAmount(GetAmount());
+                                        m_isPeriodic = false;
+                                    }
+                                }
+                                break;
+                            }
+                            //end npcbot
+
                             if (!caster || caster->GetTypeId() != TYPEID_PLAYER)
                                 return;
                             // Get SPELL_AURA_MOD_POWER_REGEN aura from spell
@@ -1100,6 +1114,20 @@ void AuraEffect::PeriodicTick(AuraApplication* aurApp, Unit* caster) const
         return;
 
     Unit* target = aurApp->GetTarget();
+
+    // Update serverside orientation of tracking channeled auras on periodic update ticks
+    // exclude players because can turn during channeling and shouldn't desync orientation client/server
+    if (caster && !caster->IsPlayer() && m_spellInfo->IsChanneled() && m_spellInfo->HasAttribute(SPELL_ATTR1_TRACK_TARGET_IN_CHANNEL))
+    {
+        ObjectGuid const channelGuid = caster->GetGuidValue(UNIT_FIELD_CHANNEL_OBJECT);
+        if (!channelGuid.IsEmpty() && channelGuid != caster->GetGUID())
+        {
+            if (WorldObject const* objectTarget = ObjectAccessor::GetWorldObject(*caster, channelGuid))
+            {
+                caster->SetInFront(objectTarget);
+            }
+        }
+    }
 
     switch (GetAuraType())
     {
@@ -1589,8 +1617,8 @@ void AuraEffect::HandleModInvisibility(AuraApplication const* aurApp, uint8 mode
         target->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_IMMUNE_OR_LOST_SELECTION);
     }
 
-    target->UpdateObjectVisibility(target->GetTypeId() == TYPEID_PLAYER || target->GetOwnerGUID().IsPlayer() || target->GetMap()->Instanceable(), true);
-    target->bRequestForcedVisibilityUpdate = false;
+    if (target->IsInWorld())
+        target->UpdateObjectVisibility();
 }
 
 void AuraEffect::HandleModStealthDetect(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -1639,6 +1667,9 @@ void AuraEffect::HandleModStealth(AuraApplication const* aurApp, uint8 mode, boo
         if (target->GetCurrentSpell(CURRENT_AUTOREPEAT_SPELL))
         {
             target->FinishSpell(CURRENT_AUTOREPEAT_SPELL);
+            //npcbot: do not try with npcbot target
+            if (target->IsPlayer())
+            //end npcbot
             target->ToPlayer()->SendAutoRepeatCancel(target);
         }
     }
@@ -1663,8 +1694,8 @@ void AuraEffect::HandleModStealth(AuraApplication const* aurApp, uint8 mode, boo
         target->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_IMMUNE_OR_LOST_SELECTION);
     }
 
-    target->UpdateObjectVisibility(target->GetTypeId() == TYPEID_PLAYER || target->GetOwnerGUID().IsPlayer() || target->GetMap()->Instanceable(), true);
-    target->bRequestForcedVisibilityUpdate = false;
+    if (target->IsInWorld())
+        target->UpdateObjectVisibility();
 }
 
 void AuraEffect::HandleModStealthLevel(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -1828,7 +1859,6 @@ void AuraEffect::HandlePhase(AuraApplication const* aurApp, uint8 mode, bool app
         if (!target->GetMap()->Instanceable())
         {
             target->UpdateObjectVisibility(false);
-            target->m_last_notify_position.Relocate(-5000.0f, -5000.0f, -5000.0f);
         }
         else
             target->UpdateObjectVisibility();
@@ -2037,6 +2067,10 @@ void AuraEffect::HandleAuraModShapeshift(AuraApplication const* aurApp, uint8 mo
             case FORM_DEFENSIVESTANCE:
             case FORM_BERSERKERSTANCE:
                 {
+                    //npcbot: skip this, handled inside class ai
+                    if (target->IsNPCBot())
+                        break;
+                    //end npcbot
                     uint32 Rage_val = 0;
                     // Defensive Tactics
                     if (form == FORM_DEFENSIVESTANCE)
@@ -2098,6 +2132,11 @@ void AuraEffect::HandleAuraModShapeshift(AuraApplication const* aurApp, uint8 mo
         // and also HandleAuraModDisarm is not triggered
         if (!target->CanUseAttackType(BASE_ATTACK))
         {
+            //npcbot: skip bots (handled inside AI)
+            if (target->IsNPCBotOrPet())
+            {}
+            else
+            //end npcbot
             if (Item* pItem = target->ToPlayer()->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND))
             {
                 target->ToPlayer()->_ApplyWeaponDamage(EQUIPMENT_SLOT_MAINHAND, pItem->GetTemplate(), nullptr, apply);
@@ -2105,6 +2144,11 @@ void AuraEffect::HandleAuraModShapeshift(AuraApplication const* aurApp, uint8 mo
         }
 
         // Update crit chance for feral forms
+        //npcbot: skip bots (handled inside AI)
+        if (target->IsNPCBotOrPet())
+        {}
+        else
+        //end npcbot
         switch (form)
         {
             case FORM_CAT:
@@ -3044,6 +3088,16 @@ void AuraEffect::HandleAuraModTotalThreat(AuraApplication const* aurApp, uint8 m
 
     Unit* target = aurApp->GetTarget();
 
+    //npcbot: handle for bots
+    if (target->IsAlive() && target->IsNPCBotOrPet())
+    {
+        Unit* caster = GetCaster();
+        if (caster && caster->IsAlive())
+            target->getHostileRefMgr().addTempThreat((float)GetAmount(), apply);
+        return;
+    }
+    //end npcbot
+
     if (!target->IsAlive() || target->GetTypeId() != TYPEID_PLAYER)
         return;
 
@@ -3813,6 +3867,17 @@ void AuraEffect::HandleAuraModEffectImmunity(AuraApplication const* aurApp, uint
         else
             sOutdoorPvPMgr->HandleDropFlag(player, GetSpellInfo()->Id);
     }
+
+    //npcbot
+    if (Creature* bot = target->ToCreature())
+    {
+        if (!apply && bot->IsNPCBot() && (GetSpellInfo()->AuraInterruptFlags & AURA_INTERRUPT_FLAG_IMMUNE_OR_LOST_SELECTION))
+        {
+            if (Battleground* botbg = bot->GetBotBG())
+                botbg->EventBotDroppedFlag(bot);
+        }
+    }
+    //end npcbot
 }
 
 void AuraEffect::HandleAuraModStateImmunity(AuraApplication const* aurApp, uint8 mode, bool apply) const
@@ -6122,14 +6187,6 @@ void AuraEffect::HandlePeriodicTriggerSpellAuraTick(Unit* target, Unit* caster) 
                     GetBase()->GetUnitOwner()->CastSpell(target, triggeredSpellInfo, true, 0, this, GetBase()->GetUnitOwner()->GetGUID());
                     return;
                 }
-            // Slime Spray - temporary here until preventing default effect works again
-            // added on 9.10.2010
-            case 69508:
-                {
-                    if (caster)
-                        caster->CastSpell(target, triggerSpellId, true, nullptr, nullptr, caster->GetGUID());
-                    return;
-                }
             // Trial of the Crusader, Jaraxxus, Spinning Pain Spike
             case 66283:
                 {
@@ -6188,6 +6245,10 @@ void AuraEffect::HandlePeriodicTriggerSpellAuraTick(Unit* target, Unit* caster) 
 
     if (triggeredSpellInfo)
     {
+        //npcbot: override spellInfo
+        triggeredSpellInfo = triggeredSpellInfo->TryGetSpellInfoOverride(caster);
+        //end npcbot
+
         if (Unit* triggerCaster = triggeredSpellInfo->NeedsToBeTriggeredByCaster(m_spellInfo, GetEffIndex()) ? caster : target)
         {
             SpellCastTargets targets;
@@ -6214,6 +6275,10 @@ void AuraEffect::HandlePeriodicTriggerSpellWithValueAuraTick(Unit* target, Unit*
     uint32 triggerSpellId = GetSpellInfo()->Effects[m_effIndex].TriggerSpell;
     if (SpellInfo const* triggeredSpellInfo = sSpellMgr->GetSpellInfo(triggerSpellId))
     {
+        //npcbot: override spellInfo
+        triggeredSpellInfo = triggeredSpellInfo->TryGetSpellInfoOverride(caster);
+        //end npcbot
+
         if (Unit* triggerCaster = triggeredSpellInfo->NeedsToBeTriggeredByCaster(m_spellInfo, GetEffIndex()) ? caster : target)
         {
             SpellCastTargets targets;
@@ -6294,11 +6359,26 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
     // ignore non positive values (can be result apply spellmods to aura damage
     uint32 damage = std::max(GetAmount(), 0);
 
+    // If the damage is percent-max-health based, calculate damage before the Modify hook
+    if (GetAuraType() == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
+    {
+        // xinef: ceil obtained value, it may happen that 10 ticks for 10% damage may not kill owner
+        damage = uint32(std::ceil(CalculatePct<float, float>(target->GetMaxHealth(), damage)));
+    }
+
     // Script Hook For HandlePeriodicDamageAurasTick -- Allow scripts to change the Damage pre class mitigation calculations
     sScriptMgr->ModifyPeriodicDamageAurasTick(target, caster, damage, GetSpellInfo());
 
     if (GetAuraType() == SPELL_AURA_PERIODIC_DAMAGE)
     {
+        //npcbot: Black Arrow damage on targets below 20%
+        if (GetSpellInfo()->SpellFamilyName == SPELLFAMILY_WARLOCK && (GetSpellInfo()->SpellFamilyFlags[1] & 0x4) &&
+            target->HasAuraState(AURA_STATE_HEALTHLESS_20_PERCENT))
+        {
+            damage *= 5;
+        }
+        //end npcbot
+
         // xinef: leave only target depending bonuses, rest is handled in calculate amount
         if (GetBase()->GetType() == DYNOBJ_AURA_TYPE && caster)
             damage = caster->SpellDamageBonusDone(target, GetSpellInfo(), damage, DOT, GetEffIndex(), 0.0f, GetBase()->GetStackAmount());
@@ -6325,8 +6405,6 @@ void AuraEffect::HandlePeriodicDamageAurasTick(Unit* target, Unit* caster) const
             // 5..8 ticks have normal tick damage
         }
     }
-    else // xinef: ceil obtained value, it may happen that 10 ticks for 10% damage may not kill owner
-        damage = uint32(std::ceil(CalculatePct<float, float>(target->GetMaxHealth(), damage)));
 
     // calculate crit chance
     bool crit = false;
@@ -6857,6 +6935,48 @@ void AuraEffect::HandleProcTriggerSpellAuraProc(AuraApplication* aurApp, ProcEve
     if (SpellInfo const* triggeredSpellInfo = sSpellMgr->GetSpellInfo(triggerSpellId))
     {
         LOG_DEBUG("spells.aura", "AuraEffect::HandleProcTriggerSpellAuraProc: Triggering spell {} from aura {} proc", triggeredSpellInfo->Id, GetId());
+
+        //npcbot: override spellInfo
+        triggeredSpellInfo = triggeredSpellInfo->TryGetSpellInfoOverride(aurApp->GetBase()->GetCaster());
+        //end npcbot
+
+        //npcbot
+        Aura const* triggeredByAura = aurApp->GetBase();
+        int32 basepoints0 = 0;
+        switch (triggerSpellId)
+        {
+            // Quest - Self Healing from resurrect (invisible in log)
+            case 25155:
+            {
+                switch (GetId())
+                {
+                    //Vampiric Aura
+                    case 20810:
+                    {
+                        DamageInfo const* dinfo = eventInfo.GetDamageInfo();
+                        uint32 damage = dinfo->GetDamage();
+                        if (!damage)
+                            return;
+
+                        // 100% / 25%
+                        if (triggerTarget->GetGUID() == triggeredByAura->GetCasterGUID())
+                            basepoints0 = int32(damage);
+                        else
+                            basepoints0 = int32(damage / 4);
+
+                        triggerCaster->CastCustomSpell(triggerTarget, triggerSpellId, &basepoints0, nullptr, nullptr, true, nullptr);
+                        return;
+                    }
+                    default:
+                        break;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+        //end npcbot
+
         triggerCaster->CastSpell(triggerTarget, triggeredSpellInfo, true, nullptr, this);
     }
     else
@@ -6875,6 +6995,10 @@ void AuraEffect::HandleProcTriggerSpellWithValueAuraProc(AuraApplication* aurApp
     {
         // used only with EXTRA_LOGS
         (void)triggeredSpellInfo;
+
+        //npcbot: override spellInfo
+        triggeredSpellInfo = triggeredSpellInfo->TryGetSpellInfoOverride(aurApp->GetBase()->GetCaster());
+        //end npcbot
 
         int32 basepoints0 = GetAmount();
         LOG_DEBUG("spells.aura", "AuraEffect::HandleProcTriggerSpellWithValueAuraProc: Triggering spell {} with value {} from aura {} proc", triggeredSpellInfo->Id, basepoints0, GetId());
