@@ -16,8 +16,8 @@
  */
 
 #include "Group.h"
+#include "InstanceMapScript.h"
 #include "Player.h"
-#include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "Vehicle.h"
 #include "trial_of_the_champion.h"
@@ -1156,7 +1156,7 @@ public:
                                     {
                                         NPC_BlackKnightGUID = bk->GetGUID();
                                         bk->SendMovementFlagUpdate(); // put him on vehicle visually
-                                        if( bk->GetTypeId() == TYPEID_UNIT )
+                                        if( bk->IsCreature() )
                                             bk->ToCreature()->SetReactState(REACT_PASSIVE);
                                     }
 

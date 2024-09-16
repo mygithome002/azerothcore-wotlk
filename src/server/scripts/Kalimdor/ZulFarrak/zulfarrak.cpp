@@ -15,6 +15,27 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "zulfarrak.h"
+#include "Cell.h"
+#include "CellImpl.h"
+#include "CreatureScript.h"
+#include "GameObject.h"
+#include "GameObjectAI.h"
+#include "GameObjectScript.h"
+#include "GridNotifiers.h"
+#include "InstanceScript.h"
+#include "ObjectAccessor.h"
+#include "Player.h"
+#include "ScriptSystem.h"
+#include "ScriptedCreature.h"
+#include "ScriptedGossip.h"
+
+/// @todo: this import is not necessary for compilation and marked as unused by the IDE
+//  however, for some reasons removing it would cause a damn linking issue
+//  there is probably some underlying problem with imports which should properly addressed
+//  see: https://github.com/azerothcore/azerothcore-wotlk/issues/9766
+#include "GridNotifiersImpl.h"
+
 /* ScriptData
 SDName: Zulfarrak
 SD%Complete: 50
@@ -26,22 +47,6 @@ EndScriptData */
 npc_sergeant_bly
 npc_weegli_blastfuse
 EndContentData */
-
-#include "zulfarrak.h"
-#include "Cell.h"
-#include "CellImpl.h"
-#include "GameObject.h"
-#include "GameObjectAI.h"
-#include "GridNotifiers.h"
-#include "GridNotifiersImpl.h"
-#include "InstanceScript.h"
-#include "MotionMaster.h"
-#include "ObjectAccessor.h"
-#include "Player.h"
-#include "ScriptMgr.h"
-#include "ScriptSystem.h"
-#include "ScriptedCreature.h"
-#include "ScriptedGossip.h"
 
 /*######
 ## npc_sergeant_bly

@@ -15,11 +15,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "CreatureScript.h"
 #include "Player.h"
-#include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellAuras.h"
 #include "SpellScript.h"
+#include "SpellScriptLoader.h"
 #include "auchenai_crypts.h"
 
 enum Spells
@@ -37,6 +38,7 @@ enum Spells
 
 enum Misc
 {
+    GROUP_BITE                  = 1,
     ENTRY_FOCUS_FIRE            = 18374,
     EMOTE_FOCUSED               = 0
 };
@@ -104,19 +106,23 @@ struct boss_shirrak_the_dead_watcher : public BossAI
         }).Schedule(28s, [this](TaskContext context)
         {
             DoCastSelf(SPELL_ATTRACT_MAGIC);
+            context.RescheduleGroup(GROUP_BITE, 1500ms);
             context.Repeat(30s);
-            scheduler.Schedule(1500ms, [this](TaskContext context)
-            {
-                DoCastSelf(SPELL_CARNIVOROUS_BITE);
-                context.Repeat(10s);
-            });
         }).Schedule(10s, [this](TaskContext context)
         {
+            context.SetGroup(GROUP_BITE);
             DoCastSelf(SPELL_CARNIVOROUS_BITE);
             context.Repeat(10s);
         }).Schedule(17s, [this](TaskContext context)
         {
+            //npcbot
+            /*
+            //end npcbot
             if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 60.0f, true))
+            //npcbot
+            */
+            if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 60.0f))
+            //end npcbot
             {
                 if (Creature* cr = me->SummonCreature(ENTRY_FOCUS_FIRE, target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), 0, TEMPSUMMON_TIMED_DESPAWN, 7000))
                 {

@@ -1,8 +1,8 @@
 -- --------------------------------------------------------
 -- Host:                         127.0.0.1
--- Server version:               8.0.29 - MySQL Community Server - GPL
+-- Server version:               8.1.0 - MySQL Community Server - GPL
 -- Server OS:                    Win64
--- HeidiSQL Version:             12.0.0.6468
+-- HeidiSQL Version:             12.3.0.6589
 -- --------------------------------------------------------
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -18,27 +18,27 @@
 DROP TABLE IF EXISTS `npc_text_locale`;
 CREATE TABLE IF NOT EXISTS `npc_text_locale` (
   `ID` int unsigned NOT NULL DEFAULT '0',
-  `Locale` varchar(4) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `Text0_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text0_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text1_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text1_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text2_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text2_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text3_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text3_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text4_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text4_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text5_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text5_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text6_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text6_1` longtext COLLATE utf8mb4_unicode_ci,
-  `Text7_0` longtext COLLATE utf8mb4_unicode_ci,
-  `Text7_1` longtext COLLATE utf8mb4_unicode_ci,
+  `Locale` varchar(4) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `Text0_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text0_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text1_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text1_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text2_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text2_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text3_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text3_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text4_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text4_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text5_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text5_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text6_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text6_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text7_0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
+  `Text7_1` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   PRIMARY KEY (`ID`,`Locale`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Dumping data for table acore_world.npc_text_locale: ~21,984 rows (approximately)
+-- Dumping data for table acore_world.npc_text_locale: ~22 644 rows (approximately)
 DELETE FROM `npc_text_locale`;
 INSERT INTO `npc_text_locale` (`ID`, `Locale`, `Text0_0`, `Text0_1`, `Text1_0`, `Text1_1`, `Text2_0`, `Text2_1`, `Text3_0`, `Text3_1`, `Text4_0`, `Text4_1`, `Text5_0`, `Text5_1`, `Text6_0`, `Text6_1`, `Text7_0`, `Text7_1`) VALUES
 	(1, 'deDE', '', 'Seid gegrüßt, $N', '', '', '', '', '', '', '', '', '', '', '', '', '', ''),
@@ -22016,6 +22016,7 @@ INSERT INTO `npc_text_locale` (`ID`, `Locale`, `Text0_0`, `Text0_1`, `Text1_0`, 
 	(50001, 'frFR', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(50016, 'esES', 'Hola, $C. Normalmente estaría al ritmo de cuidar de la gente de Ventormenta, pero muchos de los guardias están luchando en otras tierras. Así que estoy aquí, supliendo y ofreciendo recompensas cuando preferiría estar patrullando...', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(50016, 'esMX', 'Hola, $C. Normalmente estaría al ritmo de cuidar de la gente de Ventormenta, pero muchos de los guardias están luchando en otras tierras. Así que estoy aquí, supliendo y ofreciendo recompensas cuando preferiría estar patrullando...', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(50016, 'frFR', 'Bien le bonjour, $c. Je devrais être à la recherche des gens de Hurlevent, mais bon nombre de gardes de Hurlevent combattent sur d\'autres terres. Me voilà donc nommé adjoint et proposant des primes alors que je devrais être de patrouille...', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(50017, 'esES', 'Hola amigo. Mi nombre es Remy.$BSoy de Crestagrana, hacia el este, y vine aquí buscando negocios, buscando negocios. Tienes algo... ¿¿algo??', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(50017, 'esMX', 'Hola amigo. Mi nombre es Remy.$BSoy de Crestagrana, hacia el este, y vine aquí buscando negocios, buscando negocios. Tienes algo... ¿¿algo??', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
 	(50022, 'esES', '¡Saludos, $c! Un día perfecto para ir a cazar, ¿no te parece? He estado teniendo bastante suerte con los jabalíes. ¿Te gustaría intentarlo?', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),

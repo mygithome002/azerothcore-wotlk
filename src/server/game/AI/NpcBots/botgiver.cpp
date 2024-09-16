@@ -5,6 +5,7 @@
 #include "botspell.h"
 #include "bottext.h"
 #include "botmgr.h"
+#include "Chat.h"
 #include "Creature.h"
 #include "Log.h"
 #include "Player.h"
@@ -76,10 +77,21 @@ public:
                 {
                     gossipTextId = GOSSIP_BOTGIVER_HIRE;
 
-                    if (player->GetNpcBotsCount() >= BotMgr::GetMaxNpcBots())
+                    if (player->GetNpcBotsCount() >= BotMgr::GetMaxNpcBots(player->GetLevel()))
                     {
                         WhisperTo(player, me, bot_ai::LocalizedNpcText(player, BOT_TEXT_BOTGIVER_TOO_MANY_BOTS).c_str());
                         break;
+                    }
+
+                    if (uint32 maxBotsPerAccount = BotMgr::GetMaxAccountBots())
+                    {
+                        uint32 accountBotsCount = BotDataMgr::GetAccountBotsCount(player->GetSession()->GetAccountId());
+                        if (accountBotsCount >= maxBotsPerAccount)
+                        {
+                            ChatHandler ch(player->GetSession());
+                            ch.PSendSysMessage(bot_ai::LocalizedNpcText(player, BOT_TEXT_HIREFAIL_MAXBOTS_ACCOUNT).c_str(), accountBotsCount, maxBotsPerAccount);
+                            break;
+                        }
                     }
 
                     subMenu = true;
@@ -241,7 +253,7 @@ public:
                     }
 
                     bot_ai const* ai = bot->GetBotAI();
-                    if (bot->IsInCombat() || !bot->IsAlive() || bot_ai::CCed(bot) || ai->IsDuringTeleport() ||
+                    if (bot->IsInCombat() || !bot->IsAlive() || bot_ai::CCed(bot) ||
                         bot->HasUnitState(UNIT_STATE_CASTING) || ai->GetBotOwnerGuid() || bot->HasAura(BERSERK))
                     {
                         //TC_LOG_ERROR("entities.unit", "HIRE_NBOT_ENTRY: bot %u (%s) is unavailable all of the sudden!", entry);

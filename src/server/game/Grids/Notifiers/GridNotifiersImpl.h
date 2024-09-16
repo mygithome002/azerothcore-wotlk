@@ -38,6 +38,9 @@ inline void Acore::VisibleNotifier::Visit(GridRefMgr<T>& m)
 
     for (typename GridRefMgr<T>::iterator iter = m.begin(); iter != m.end(); ++iter)
     {
+        if (i_largeOnly != iter->GetSource()->IsVisibilityOverridden())
+            continue;
+
         vis_guids.erase(iter->GetSource()->GetGUID());
         i_player.UpdateVisibilityOf(iter->GetSource(), i_data, i_visibleNow);
     }
@@ -577,7 +580,7 @@ void Acore::LocalizedPacketListDo<Builder>::operator()(Player* p)
     else
         data_list = &i_data_cache[cache_idx];
 
-    for (size_t i = 0; i < data_list->size(); ++i)
+    for (std::size_t i = 0; i < data_list->size(); ++i)
         p->SendDirectMessage((*data_list)[i]);
 }
 

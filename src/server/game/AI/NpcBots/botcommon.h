@@ -13,6 +13,9 @@ NpcBot System by Trickerer (onlysuffering@gmail.com)
 Original patch from: LordPsyan https://bitbucket.org/lordpsyan/trinitycore-patches/src/3b8b9072280e/Individual/11185-BOTS-NPCBots.patch
 */
 
+constexpr std::size_t MAX_BOT_LOG_PARAMS = 5;
+constexpr std::size_t MAX_BOT_LOG_PARAM_LENGTH = 50;
+
 struct Position;
 
 typedef std::vector<std::pair<Position, float> > AoeSpotsVec;
@@ -86,11 +89,14 @@ enum BotCommonValues
     CREATURE_ICC_MUTATED_ABOMINATION7   = 38786,
     CREATURE_ICC_MUTATED_ABOMINATION8   = 38787,
 //COMMON AOE TRIGGERS
+    CREATURE_FOCUS_FIRE_N               = 18374,
+    CREATURE_FOCUS_FIRE_H               = 20308,
     CREATURE_ZA_FIRE_BOMB               = 23920,
     CREATURE_UK_SHADOW_AXE_N            = 23997,
     CREATURE_UK_SHADOW_AXE_H            = 31835,
     CREATURE_EOE_STATIC_FIELD           = 30592,
     CREATURE_ICC_OOZE_PUDDLE            = 37690,
+    GAMEOBJECT_HOT_COAL                 = 178164,
 //COMMON ENEMY CREATURES
     CREATURE_BOSS_EREGOS_N              = 27656,
     CREATURE_BOSS_EREGOS_H              = 31561,
@@ -560,7 +566,10 @@ constexpr size_t MAX_SEND_POINTS = 5u;
 enum BotOrderTypes
 {
     BOT_ORDER_NONE          = 0,
-    BOT_ORDER_SPELLCAST     = 1
+    BOT_ORDER_SPELLCAST     = 1,
+    BOT_ORDER_PULL          = 2,
+
+    BOT_ORDER_END
 };
 constexpr bool DEBUG_BOT_ORDERS = false;
 constexpr size_t MAX_BOT_ORDERS_QUEUE_SIZE = 3u;

@@ -45,7 +45,7 @@ class BattlegroundIC;
 struct PvPDifficultyEntry;
 struct GraveyardStruct;
 
-enum BattlegroundDesertionType
+enum BattlegroundDesertionType : uint8
 {
     BG_DESERTION_TYPE_LEAVE_BG          = 0, // player leaves the BG
     BG_DESERTION_TYPE_OFFLINE           = 1, // player is kicked from BG because offline
@@ -283,7 +283,6 @@ enum BGHonorMode
     BG_HONOR_MODE_NUM
 };
 
-#define BG_AWARD_ARENA_POINTS_MIN_LEVEL 71
 #define ARENA_TIMELIMIT_POINTS_LOSS    -16
 #define ARENA_READY_MARKER_ENTRY 301337
 
@@ -351,7 +350,7 @@ public:
     [[nodiscard]] uint32 GetBonusHonorFromKill(uint32 kills) const;
 
     // Spirit of Competition event
-    bool SpiritofCompetitionEvent(PvPTeamId winnerTeamId);
+    void SpiritOfCompetitionEvent(PvPTeamId winnerTeamId) const;
 
     bool IsRandom() { return m_IsRandom; }
 
@@ -482,13 +481,6 @@ public:
 
     void BlockMovement(Player* player);
 
-    void SendWarningToAll(uint32 entry, ...);
-    void SendMessageToAll(uint32 entry, ChatMsg type, Player const* source = nullptr);
-    void PSendMessageToAll(uint32 entry, ChatMsg type, Player const* source, ...);
-
-    // specialized version with 2 string id args
-    void SendMessage2ToAll(uint32 entry, ChatMsg type, Player const* source, uint32 strId1 = 0, uint32 strId2 = 0);
-
     // Raid Group
     [[nodiscard]] Group* GetBgRaid(TeamId teamId) const { return m_BgRaids[teamId]; }
     void SetBgRaid(TeamId teamId, Group* bg_raid);
@@ -546,6 +538,9 @@ public:
     virtual void RemoveBotAtLeave(ObjectGuid guid);
     virtual bool UpdateBotScore(Creature const* bot, uint32 type, uint32 value);
     void AddOrSetBotToCorrectBgGroup(Creature* bot, TeamId teamId);
+    void RewardXPAtKill(Player* killer, Creature* victim);
+    void RewardXPAtKill(Creature* killer, Player* victim);
+    void RewardXPAtKill(Creature* killer, Creature* victim);
     virtual void HandleBotKillPlayer(Creature* killer, Player* victim);
     virtual void HandleBotKillBot(Creature* killer, Creature* victim);
     virtual void HandlePlayerKillBot(Creature* victim, Player* killer);

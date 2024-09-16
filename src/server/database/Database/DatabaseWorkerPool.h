@@ -24,6 +24,34 @@
 #include <array>
 #include <vector>
 
+/** @file DatabaseWorkerPool.h */
+
+/**
+* @def MIN_MYSQL_CLIENT_VERSION
+* The minimum MariaDB Client Version
+* MARIADB_VERSION_ID is defined if using libmariadbclient instead of libmysqlclient
+*/
+#if MARIADB_VERSION_ID >= 100600
+#define MIN_MYSQL_CLIENT_VERSION 30203u
+#else
+/**
+* @def MIN_MYSQL_CLIENT_VERSION
+* The minimum MySQL Client Version
+*/
+#define MIN_MYSQL_CLIENT_VERSION 50700u
+#endif
+
+/**
+* @def MIN_MYSQL_SERVER_VERSION
+* The minimum MySQL Server Version
+*/
+#define MIN_MYSQL_SERVER_VERSION "5.7.0"
+/**
+* @def MIN_MARIADB_SERVER_VERSION
+* The minimum MariaDB Server Version
+*/
+#define MIN_MARIADB_SERVER_VERSION "10.5.0"
+
 template <typename T>
 class ProducerConsumerQueue;
 
@@ -75,7 +103,7 @@ public:
         if (sql.empty())
             return;
 
-        Execute(Acore::StringFormatFmt(sql, std::forward<Args>(args)...));
+        Execute(Acore::StringFormat(sql, std::forward<Args>(args)...));
     }
 
     //! Enqueues a one-way SQL operation in prepared statement format that will be executed asynchronously.
@@ -98,7 +126,7 @@ public:
         if (sql.empty())
             return;
 
-        DirectExecute(Acore::StringFormatFmt(sql, std::forward<Args>(args)...));
+        DirectExecute(Acore::StringFormat(sql, std::forward<Args>(args)...));
     }
 
     //! Directly executes a one-way SQL operation in prepared statement format, that will block the calling thread until finished.
@@ -121,7 +149,7 @@ public:
         if (sql.empty())
             return QueryResult(nullptr);
 
-        return Query(Acore::StringFormatFmt(sql, std::forward<Args>(args)...));
+        return Query(Acore::StringFormat(sql, std::forward<Args>(args)...));
     }
 
     //! Directly executes an SQL query in prepared format that will block the calling thread until finished.
@@ -199,7 +227,7 @@ public:
 #endif
     }
 
-    [[nodiscard]] size_t QueueSize() const;
+    [[nodiscard]] std::size_t QueueSize() const;
 
 private:
     uint32 OpenConnections(InternalIndex type, uint8 numConnections);

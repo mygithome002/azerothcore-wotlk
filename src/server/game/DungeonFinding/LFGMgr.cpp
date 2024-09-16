@@ -17,6 +17,7 @@
 
 #include "LFGMgr.h"
 #include "BattlegroundMgr.h"
+#include "Chat.h"
 #include "CharacterCache.h"
 #include "Common.h"
 #include "DBCStores.h"
@@ -34,6 +35,7 @@
 #include "ObjectMgr.h"
 #include "Opcodes.h"
 #include "Player.h"
+#include "ScriptMgr.h"
 #include "SharedDefines.h"
 #include "SocialMgr.h"
 #include "SpellAuras.h"
@@ -50,9 +52,6 @@ namespace lfg
 {
     LFGMgr::LFGMgr(): m_lfgProposalId(1), m_options(sWorld->getIntConfig(CONFIG_LFG_OPTIONSMASK)), m_Testing(false)
     {
-        new LFGPlayerScript();
-        new LFGGroupScript();
-
         for (uint8 team = 0; team < 2; ++team)
         {
             m_raidBrowserUpdateTimer[team] = 10000;
@@ -674,8 +673,7 @@ namespace lfg
 
                                     if (plrg->GetGUID() != grp->GetLeaderGUID())
                                         if (Player* leader = ObjectAccessor::FindPlayer(grp->GetLeaderGUID()))
-                                            (ChatHandler(leader->GetSession())).PSendSysMessage("There is a npcbot in your group (owner: %s). Using npcbots in Dungeon Finder is restricted. Contact your administration.",
-                                                plrg->GetName().c_str());
+                                            (ChatHandler(leader->GetSession())).PSendSysMessage("There is a npcbot in your group (owner: {}). Using npcbots in Dungeon Finder is restricted. Contact your administration.", plrg->GetName());
 
                                     joinData.result = LFG_JOIN_PARTY_NOT_MEET_REQS;
                                     break;
@@ -686,7 +684,7 @@ namespace lfg
                                     //if (!(bot->GetBotRoles() & ( 1 | 2 | 4 ))) //(BOT_ROLE_TANK | BOT_ROLE_DPS | BOT_ROLE_HEAL)
                                     //{
                                     //    //no valid roles - reqs are not met
-                                    //    (ChatHandler(plrg->GetSession())).PSendSysMessage("Your bot %s does not have any viable roles assigned.", bot->GetName().c_str());
+                                    //    (ChatHandler(plrg->GetSession())).PSendSysMessage("Your bot {} does not have any viable roles assigned.", bot->GetName());
                                     //    joinData.result = LFG_JOIN_PARTY_NOT_MEET_REQS;
                                     //    continue;
                                     //}
@@ -904,7 +902,7 @@ namespace lfg
     void LFGMgr::ToggleTesting()
     {
         m_Testing = !m_Testing;
-        sWorld->SendWorldText(m_Testing ? LANG_DEBUG_LFG_ON : LANG_DEBUG_LFG_OFF);
+        ChatHandler(nullptr).SendWorldText(m_Testing ? LANG_DEBUG_LFG_ON : LANG_DEBUG_LFG_OFF);
     }
 
     /**
@@ -1154,7 +1152,7 @@ namespace lfg
                     baseAP = p->GetTotalAttackPowerValue(BASE_ATTACK);
                     rangedAP = p->GetTotalAttackPowerValue(RANGED_ATTACK);
                     maxPower = 0;
-                    if (p->getClass() == CLASS_DRUID)
+                    if (p->IsClass(CLASS_DRUID))
                         maxPower = p->GetMaxPower(POWER_MANA);
                     else
                         maxPower = (p->getPowerType() == POWER_RAGE || p->getPowerType() == POWER_RUNIC_POWER) ? p->GetMaxPower(p->getPowerType()) / 10 : p->GetMaxPower(p->getPowerType());
@@ -2332,14 +2330,6 @@ namespace lfg
             return;
         }
 
-        if (out)
-        {
-            if (player->GetMapId() == uint32(dungeon->map))
-                player->TeleportToEntryPoint();
-
-            return;
-        }
-
         LfgTeleportError error = LFG_TELEPORTERROR_OK;
 
         if (!player->IsAlive())
@@ -2361,6 +2351,13 @@ namespace lfg
         else if (player->GetCharmGUID() || player->IsInCombat())
         {
             error = LFG_TELEPORTERROR_COMBAT;
+        }
+        else if (out && error == LFG_TELEPORTERROR_OK)
+        {
+            if (player->GetMapId() == uint32(dungeon->map))
+                player->TeleportToEntryPoint();
+
+            return;
         }
         else
         {
@@ -2387,11 +2384,18 @@ namespace lfg
         }
 
         if (error != LFG_TELEPORTERROR_OK)
+        {
             player->GetSession()->SendLfgTeleportError(uint8(error));
 
-        //LOG_DEBUG("lfg", "TeleportPlayer: Player {} is being teleported in to map {} "
-        //    "(x: {}, y: {}, z: {}) Result: {}", player->GetName(), dungeon->map,
-        //    dungeon->x, dungeon->y, dungeon->z, error);
+            LOG_DEBUG("lfg", "Player [{}] could NOT be teleported in to map [{}] (x: {}, y: {}, z: {}) Error: {}",
+            player->GetName(), dungeon->map, dungeon->x, dungeon->y, dungeon->z, error);
+        }
+        else
+        {
+            LOG_DEBUG("lfg", "Player [{}] is being teleported in to map [{}] (x: {}, y: {}, z: {})",
+            player->GetName(), dungeon->map, dungeon->x, dungeon->y, dungeon->z);
+        }
+
     }
 
     /**

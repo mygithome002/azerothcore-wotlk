@@ -17,8 +17,8 @@
 
 #include "GameTime.h"
 #include "Group.h"
+#include "InstanceMapScript.h"
 #include "Player.h"
-#include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "trial_of_the_crusader.h"
 
@@ -118,7 +118,7 @@ public:
                 return true;
             if (item->ItemId == 46017) // Val'anyr, Hammer of Ancient Kings - exception, too powerful
                 return false;
-            if (item->ItemLevel == 245 && item->Bonding == BIND_WHEN_EQUIPED) // this also includes items crafted from patterns obtained in ToC 10 norm/hc
+            if (item->ItemLevel == 245 && item->Bonding == BIND_WHEN_EQUIPPED) // this also includes items crafted from patterns obtained in ToC 10 norm/hc
                 return true;
             if (validDedicatedInsanityItems.find(item->ItemId) != validDedicatedInsanityItems.end()) // list of items dropping from ToC 10 norm/hc and also items ilevel 245 buyable for emblems of triumph
                 return true;
@@ -155,7 +155,7 @@ public:
 
         void OnUnitDeath(Unit* u) override
         {
-            if (bNooneDied && u->GetTypeId() == TYPEID_PLAYER)
+            if (bNooneDied && u->IsPlayer())
             {
                 bNooneDied = false;
                 SaveToDB();
@@ -884,8 +884,7 @@ public:
                     {
                         if( Creature* c = instance->GetCreature(NPC_JaraxxusGUID) )
                         {
-                            c->Yell("Banished to the Nether!", LANG_UNIVERSAL);
-                            c->PlayDirectSound(16146, 0);
+                            c->AI()->Talk(SAY_STAGE_1_06_1);
                             if( Creature* f = instance->GetCreature(NPC_FizzlebangGUID) )
                             {
                                 c->CastSpell(f, 67888, true);

@@ -247,7 +247,7 @@ public:
         void KilledUnit(Unit* u) override { bot_ai::KilledUnit(u); }
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override { bot_ai::EnterEvadeMode(why); }
         void MoveInLineOfSight(Unit* u) override { bot_ai::MoveInLineOfSight(u); }
-        void JustDied(Unit* u) override { Aspect = 0; UnsummonAll(); bot_ai::JustDied(u); }
+        void JustDied(Unit* u) override { Aspect = 0; UnsummonAll(false); bot_ai::JustDied(u); }
         void DoNonCombatActions(uint32 /*diff*/) { }
 
         void CheckAspects(uint32 diff)
@@ -1823,7 +1823,7 @@ public:
         void SummonBotPet()
         {
             if (botPet)
-                UnsummonAll();
+                UnsummonAll(false);
 
             if (me->GetLevel() < 10)
                 return;
@@ -1908,10 +1908,9 @@ public:
             botPet = myPet;
         }
 
-        void UnsummonAll() override
+        void UnsummonAll(bool savePets = true) override
         {
-            if (botPet)
-                botPet->ToTempSummon()->UnSummon();
+            UnsummonPet(savePets);
         }
 
         void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override
@@ -1976,7 +1975,7 @@ public:
             {
                 case BOTAI_MISC_PET_TYPE:
                     myPetType = value;
-                    UnsummonAll();
+                    UnsummonAll(false);
                     break;
                 default:
                     break;
@@ -1985,7 +1984,7 @@ public:
 
         void Reset() override
         {
-            UnsummonAll();
+            UnsummonAll(false);
 
             myPetType = 0;
 

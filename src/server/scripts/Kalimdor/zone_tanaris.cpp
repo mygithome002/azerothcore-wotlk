@@ -30,8 +30,8 @@ npc_stone_watcher_of_norgannon
 npc_tooga
 EndContentData */
 
+#include "CreatureScript.h"
 #include "Player.h"
-#include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "ScriptedEscortAI.h"
 #include "ScriptedFollowerAI.h"
@@ -121,7 +121,7 @@ public:
             {
                 if (SendItemTimer <= diff)
                 {
-                    if (me->GetVictim()->GetTypeId() == TYPEID_PLAYER)
+                    if (me->GetVictim()->IsPlayer())
                         SendItem(me->GetVictim());
                     SendItemTimer = 5000;
                 }

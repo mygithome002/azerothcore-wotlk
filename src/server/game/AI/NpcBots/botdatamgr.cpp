@@ -2,6 +2,7 @@
 #include "BattlegroundQueue.h"
 #include "bot_ai.h"
 #include "botdatamgr.h"
+#include "botlog.h"
 #include "botmgr.h"
 #include "botspell.h"
 #include "botwanderful.h"
@@ -10,6 +11,7 @@
 #include "Creature.h"
 #include "DatabaseEnv.h"
 #include "DBCStores.h"
+#include "GameTime.h"
 #include "GroupMgr.h"
 #include "Item.h"
 #include "Log.h"
@@ -76,11 +78,12 @@ class BotBattlegroundEnterEvent : public BasicEvent
     const ObjectGuid _playerGUID;
     const ObjectGuid _botGUID;
     const BattlegroundQueueTypeId _bgQueueTypeId;
+    const BattlegroundTypeId _bgTypeId;
     const uint64 _removeTime;
 
 public:
-    BotBattlegroundEnterEvent(ObjectGuid playerGUID, ObjectGuid botGUID, BattlegroundQueueTypeId bgQueueTypeId, uint64 removeTime)
-        : _playerGUID(playerGUID), _botGUID(botGUID), _bgQueueTypeId(bgQueueTypeId), _removeTime(removeTime) {}
+    BotBattlegroundEnterEvent(ObjectGuid playerGUID, ObjectGuid botGUID, BattlegroundQueueTypeId bgQueueTypeId, BattlegroundTypeId bgTypeId, uint64 removeTime)
+        : _playerGUID(playerGUID), _botGUID(botGUID), _bgQueueTypeId(bgQueueTypeId), _bgTypeId(bgTypeId), _removeTime(removeTime) {}
 
     void AbortMe()
     {
@@ -105,24 +108,27 @@ public:
         }
         else if (Creature const* bot = BotDataMgr::FindBot(_botGUID.GetEntry()))
         {
-            Player const* bgPlayer = ObjectAccessor::FindConnectedPlayer(_playerGUID);
-            if (bgPlayer && bgPlayer->IsInWorld() && bgPlayer->InBattleground() && bgPlayer->GetMap()->IsBattlegroundOrArena())
+            // Battleground is created at this point, try to find it
+            BattlegroundQueue& queue = sBattlegroundMgr->GetBattlegroundQueue(_bgQueueTypeId);
+            BattlegroundQueue::QueuedPlayersMap::const_iterator qpm_citr = queue.m_QueuedPlayers.find(_botGUID);
+            GroupQueueInfo const* my_gqi = qpm_citr != queue.m_QueuedPlayers.cend() ? qpm_citr->second : nullptr;
+            Battleground* bg = my_gqi ? sBattlegroundMgr->GetBattleground(my_gqi->IsInvitedToBGInstanceGUID, _bgTypeId) : nullptr;
+
+            if (!bg || bg->GetPlayersCountByTeam(TEAM_ALLIANCE) + bg->GetPlayersCountByTeam(TEAM_HORDE) >= bg->GetMaxPlayersPerTeam() * 2)
             {
-                Battleground* bg = ASSERT_NOTNULL(bgPlayer->GetBattleground());
+                AbortAll();
+                return true;
+            }
 
-                //full, some players connected
-                if (bg->GetPlayersCountByTeam(TEAM_ALLIANCE) + bg->GetPlayersCountByTeam(TEAM_HORDE) >= bg->GetMaxPlayersPerTeam() * 2)
-                {
-                    AbortAll();
-                    return true;
-                }
+            if (!queue.IsBotInvited(_botGUID, bg->GetInstanceID()))
+            {
+                AbortMe();
+                return true;
+            }
 
-                BattlegroundQueue& queue = sBattlegroundMgr->GetBattlegroundQueue(_bgQueueTypeId);
-                if (!queue.IsBotInvited(_botGUID, bg->GetInstanceID()))
-                {
-                    AbortMe();
-                    return true;
-                }
+            if (bg->GetPlayersCountByTeam(TEAM_ALLIANCE) + bg->GetPlayersCountByTeam(TEAM_HORDE) > 0)
+            {
+                Map* bgMap = ASSERT_NOTNULL(sMapMgr->FindMap(bg->GetMapId(), bg->GetInstanceID()));
 
                 queue.RemovePlayer(bot->GetGUID(), false);
 
@@ -130,10 +136,12 @@ public:
                 bot->GetBotAI()->SetBG(bg);
 
                 TeamId teamId = BotDataMgr::GetTeamIdForFaction(bot->GetFaction());
-                BotMgr::TeleportBot(const_cast<Creature*>(bot), bgPlayer->GetMap(), bg->GetTeamStartPosition(teamId), true, false);
+                BotMgr::TeleportBot(const_cast<Creature*>(bot), bgMap, bg->GetTeamStartPosition(teamId), true, false);
             }
-            else if (bgPlayer && bgPlayer->InBattlegroundQueue() && bgPlayer->GetBattlegroundQueueIndex(_bgQueueTypeId) < PLAYER_MAX_BATTLEGROUND_QUEUES)
-                botBGJoinEvents.at(_playerGUID).AddEventAtOffset(new BotBattlegroundEnterEvent(_playerGUID, _botGUID, _bgQueueTypeId, _removeTime), 2s);
+            else if (std::any_of(queue.m_QueuedPlayers.cbegin(), queue.m_QueuedPlayers.cend(), [=](BattlegroundQueue::QueuedPlayersMap::value_type const& qpm_pair) {
+                return qpm_pair.first.IsPlayer() && qpm_pair.second->IsInvitedToBGInstanceGUID == my_gqi->IsInvitedToBGInstanceGUID;
+            }))
+                botBGJoinEvents.at(_playerGUID).AddEventAtOffset(new BotBattlegroundEnterEvent(_playerGUID, _botGUID, _bgQueueTypeId, _bgTypeId, _removeTime), 2s);
             else
                 AbortAll();
         }
@@ -144,7 +152,7 @@ public:
     void Abort(uint64 /*e_time*/) override { AbortMe(); }
 };
 
-void SpawnWandererBot(uint32 bot_id, WanderNode const* spawnLoc, NpcBotRegistry* registry)
+static void SpawnWandererBot(uint32 bot_id, WanderNode const* spawnLoc, NpcBotRegistry* registry)
 {
     CreatureTemplate const& bot_template = _botsWanderCreatureTemplates.at(bot_id);
     NpcBotData const* bot_data = BotDataMgr::SelectNpcBotData(bot_id);
@@ -225,13 +233,13 @@ private:
         ASSERT(next_bot_id > BOT_ENTRY_BEGIN);
 
         for (uint8 c = BOT_CLASS_WARRIOR; c < BOT_CLASS_END; ++c)
-            if (BotMgr::IsClassEnabled(c) && _spareBotIdsPerClassMap.find(c) == _spareBotIdsPerClassMap.cend())
+            if (BotMgr::IsWanderingClassEnabled(c) && _spareBotIdsPerClassMap.find(c) == _spareBotIdsPerClassMap.cend())
                 _spareBotIdsPerClassMap.insert({ c, {} });
 
         for (decltype(_botsExtras)::value_type const& vt : _botsExtras)
         {
             uint8 c = vt.second->bclass;
-            if (c != BOT_CLASS_NONE && BotMgr::IsClassEnabled(c))
+            if (c != BOT_CLASS_NONE && BotMgr::IsWanderingClassEnabled(c))
             {
                 ++enabledBotsCount;
                 if (_botsData.find(vt.first) == _botsData.end())
@@ -253,21 +261,16 @@ private:
         return (bot_class >= BOT_CLASS_EX_START) ? wbot_faction_for_ex_class.find(bot_class)->second : rentry ? rentry->FactionID : 14u;
     }
 
-    bool GenerateWanderingBotToSpawn(std::map<uint8, std::set<uint32>>& spareBotIdsPerClass, uint8 desired_bracket,
+    bool GenerateWanderingBotToSpawn(std::pair<uint8, uint32> const& spareBotPair, uint8 desired_bracket,
         NodeVec const& spawns_a, NodeVec const& spawns_h, NodeVec const& spawns_n,
         bool immediate, PvPDifficultyEntry const* bracketEntry, NpcBotRegistry* registry)
     {
-        ASSERT(!spareBotIdsPerClass.empty());
-
         CreatureTemplateContainer const* all_templates = sObjectMgr->GetCreatureTemplates();
 
         while (all_templates->find(++next_bot_id) != all_templates->cend()) {}
 
-        auto const& spareBotPair = Acore::Containers::SelectRandomContainerElement(spareBotIdsPerClass);
         const uint8 bot_class = spareBotPair.first;
-        auto const& cSet = spareBotPair.second;
-        ASSERT(!cSet.empty());
-        uint32 orig_entry = cSet.size() == 1 ? *cSet.cbegin() : Acore::Containers::SelectRandomContainerElement(cSet);
+        const uint32 orig_entry = spareBotPair.second;
         CreatureTemplate const* orig_template = ASSERT_NOTNULL(sObjectMgr->GetCreatureTemplate(orig_entry));
         NpcBotExtras const* orig_extras = ASSERT_NOTNULL(BotDataMgr::SelectNpcBotExtras(orig_entry));
         uint32 bot_faction = GetDefaultFactionForRaceClass(bot_class, orig_extras->race);
@@ -327,6 +330,8 @@ private:
             //force level range for bgs
             bot_template.minlevel = std::min<uint32>(bracketEntry->minLevel, max_level);
             bot_template.maxlevel = std::min<uint32>(bracketEntry->maxLevel, max_level);
+            if (sWorld->getBoolConfig(CONFIG_BG_XP_FOR_KILL))
+                bot_template.flags_extra &= ~(CREATURE_FLAG_EXTRA_NO_XP);
         }
         else
         {
@@ -375,10 +380,6 @@ private:
         _spareBotIdsPerClassMap.at(bot_class).erase(orig_entry);
         if (_spareBotIdsPerClassMap.at(bot_class).empty())
             _spareBotIdsPerClassMap.erase(bot_class);
-
-        spareBotIdsPerClass.at(bot_class).erase(orig_entry);
-        if (spareBotIdsPerClass.at(bot_class).empty())
-            spareBotIdsPerClass.erase(bot_class);
 
         return true;
     }
@@ -476,9 +477,11 @@ public:
             }
         }
 
-        decltype (_spareBotIdsPerClassMap) teamSpareBotIdsPerClass;
-        BotBrackets bracketPcts{};
-        BotBrackets bots_per_bracket{};
+        std::vector<std::pair<uint8, uint32>> teamSpareBotIdsPerClass;
+        PctBrackets bracketPcts{};
+        PctBrackets bots_per_bracket{};
+
+        teamSpareBotIdsPerClass.reserve(count);
 
         if (team == -1)
         {
@@ -486,7 +489,9 @@ public:
                 return false;
 
             //make a full copy
-            teamSpareBotIdsPerClass = _spareBotIdsPerClassMap;
+            for (auto const& kv : _spareBotIdsPerClassMap)
+                for (uint32 spareBotId : kv.second)
+                    teamSpareBotIdsPerClass.push_back({kv.first, spareBotId});
             bracketPcts = BotMgr::GetBotWandererLevelBrackets();
         }
         else
@@ -520,14 +525,10 @@ public:
                     if (int32(botTeam) != team)
                         continue;
 
-                    if (bracketEntry)
-                    {
-                        uint8 botminlevel = BotDataMgr::GetMinLevelForBotClass(kv.first);
-                        if (botminlevel > bracketEntry->maxLevel)
-                            continue;
-                    }
+                    if (bracketEntry && BotDataMgr::GetMinLevelForBotClass(kv.first) > bracketEntry->maxLevel)
+                        continue;
 
-                    teamSpareBotIdsPerClass[kv.first].insert(spareBotId);
+                    teamSpareBotIdsPerClass.push_back({kv.first, spareBotId});
                 }
             }
         }
@@ -562,6 +563,8 @@ public:
                 --bots_per_bracket[bracket];
             }
         }
+
+        Acore::Containers::RandomShuffle(teamSpareBotIdsPerClass);
         Acore::Containers::RandomShuffle(brackets_shuffled);
 
         for (size_t i = 0; i < brackets_shuffled.size() && !teamSpareBotIdsPerClass.empty();) // i is a counter, NOT used as index or value
@@ -571,10 +574,11 @@ public:
             int8 tries = 100;
             do {
                 --tries;
-                if (GenerateWanderingBotToSpawn(teamSpareBotIdsPerClass, bracket, spawns_a, spawns_h, spawns_n, immediate, bracketEntry, registry))
+                if (GenerateWanderingBotToSpawn(teamSpareBotIdsPerClass.back(), bracket, spawns_a, spawns_h, spawns_n, immediate, bracketEntry, registry))
                 {
                     ++i;
                     ++spawned;
+                    teamSpareBotIdsPerClass.pop_back();
                     break;
                 }
             } while (tries >= 0);
@@ -601,6 +605,16 @@ void BotDataMgr::Update(uint32 diff)
     botSpawnEvents.Update(diff);
     for (auto& kv : botBGJoinEvents)
         kv.second.Update(diff);
+
+    //lock is not needed here
+    for (Creature const* bot : _existingBots)
+    {
+        if (bot->IsFreeBot() && !bot->IsWandererBot() && !bot->IsInWorld() && bot->FindMap() && !!SelectNpcBotData(bot->GetEntry()))
+        {
+            bot->GetBotAI()->CommonTimers(diff);
+            bot->GetBotAI()->UpdateAI(diff);
+        }
+    }
 
     if (!_botsWanderCreaturesToDespawn.empty())
     {
@@ -782,7 +796,7 @@ void BotDataMgr::LoadNpcBots(bool spawn)
                 continue;
             }
 
-            if (_botsTransmogData.count(entry) == 0)
+            if (!_botsTransmogData.contains(entry))
                 _botsTransmogData[entry] = new NpcBotTransmogData();
 
             //load data
@@ -799,9 +813,11 @@ void BotDataMgr::LoadNpcBots(bool spawn)
     else
         LOG_INFO("server.loading", ">> Bots transmog data is not loaded. Table `characters_npcbot_transmog` is empty!");
 
-    //                                       0      1      2      3     4        5          6          7          8          9               10          11          12         13
-    result = CharacterDatabase.Query("SELECT entry, owner, roles, spec, faction, equipMhEx, equipOhEx, equipRhEx, equipHead, equipShoulders, equipChest, equipWaist, equipLegs, equipFeet,"
-    //   14          15          16         17         18            19            20             21             22         23
+    //                                       0      1      2      3     4        5
+    result = CharacterDatabase.Query("SELECT entry, owner, roles, spec, faction, UNIX_TIMESTAMP(hire_time),"
+    //   6          7          8          9               10          11          12         13         14
+        "equipMhEx, equipOhEx, equipRhEx, equipHead, equipShoulders, equipChest, equipWaist, equipLegs, equipFeet,"
+    //   15          16          17         18         19            20            21             22             23         24
         "equipWrist, equipHands, equipBack, equipBody, equipFinger1, equipFinger2, equipTrinket1, equipTrinket2, equipNeck, spells_disabled FROM characters_npcbot");
 
     if (result)
@@ -832,6 +848,7 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             botData->roles =        field[++index].Get<uint32>();
             botData->spec =         field[++index].Get<uint8>();
             botData->faction =      field[++index].Get<uint32>();
+            botData->hire_time =    field[++index].Get<uint64>();
 
             for (uint8 i = BOT_SLOT_MAINHAND; i != BOT_INVENTORY_SIZE; ++i)
                 botData->equips[i] = field[++index].Get<uint32>();
@@ -858,8 +875,8 @@ void BotDataMgr::LoadNpcBots(bool spawn)
             {
                 uint32 entry = *itr;
                 proto = sObjectMgr->GetCreatureTemplate(entry);
-                //                                     1     2    3           4            5           6
-                infores = WorldDatabase.Query("SELECT guid, map, position_x, position_y"/*, position_z, orientation*/" FROM creature WHERE id1 = {}", entry);
+                //                                     1     2    3           4           5           6
+                infores = WorldDatabase.Query("SELECT guid, map, position_x, position_y, position_z, orientation FROM creature WHERE id1 = {}", entry);
                 if (!infores)
                 {
                     LOG_ERROR("server.loading", "Cannot spawn npcbot {} (id: {}), not found in `creature` table!", proto->Name.c_str(), entry);
@@ -871,40 +888,34 @@ void BotDataMgr::LoadNpcBots(bool spawn)
                 uint32 mapId = uint32(field[1].Get<uint16>());
                 float pos_x = field[2].Get<float>();
                 float pos_y = field[3].Get<float>();
-                //float pos_z = field[4].GetFloat();
-                //float ori = field[5].GetFloat();
+                float pos_z = field[4].Get<float>();
+                float ori = field[5].Get<float>();
 
                 CellCoord c = Acore::ComputeCellCoord(pos_x, pos_y);
                 GridCoord g = Acore::ComputeGridCoord(pos_x, pos_y);
                 ASSERT(c.IsCoordValid(), "Invalid Cell coord!");
                 ASSERT(g.IsCoordValid(), "Invalid Grid coord!");
                 Map* map = sMapMgr->CreateBaseMap(mapId);
-                map->LoadGrid(pos_x, pos_y);
-
-                ObjectGuid Guid(HighGuid::Unit, entry, tableGuid);
-                LOG_DEBUG("server.loading", "bot {}: spawnId {}, full {}", entry, tableGuid, Guid.ToString().c_str());
-                Creature* bot = map->GetCreature(Guid);
-                if (!bot) //not in map, use storage
+                Position spawnPos(pos_x, pos_y, pos_z, ori);
+                Creature* bot = new Creature();
+                if (!bot->LoadBotCreatureFromDB(tableGuid, map, false, false, entry, &spawnPos))
                 {
-                    //TC_LOG_DEBUG("server.loading", "bot %u: spawnId %u, is not in map on load", entry, tableGuid);
-                    typedef Map::CreatureBySpawnIdContainer::const_iterator SpawnIter;
-                    std::pair<SpawnIter, SpawnIter> creBounds = map->GetCreatureBySpawnIdStore().equal_range(tableGuid);
-                    if (creBounds.first == creBounds.second)
-                    {
-                        LOG_ERROR("server.loading", "bot {} is not in spawns list, consider re-spawning it!", entry);
-                        continue;
-                    }
-                    bot = creBounds.first->second;
+                    delete bot;
+                    LOG_FATAL("server.loading", "Cannot load npcbot {} from DB!", entry);
+                    ABORT();
                 }
-                ASSERT(bot);
-                if (!bot->FindMap())
-                    LOG_ERROR("server.loading", "bot {} is not in map!", entry);
-                if (!bot->IsInWorld())
-                    LOG_ERROR("server.loading", "bot {} is not in world!", entry);
+
+                if (!bot->AIM_Initialize())
+                {
+                    delete bot;
+                    LOG_FATAL("server.loading", "Cannot initialize npcbot {} AI!", entry);
+                    ABORT();
+                }
+
                 if (!bot->IsAlive())
                 {
-                    LOG_ERROR("server.loading", "bot {} is dead, respawning!", entry);
-                    bot->Respawn();
+                    LOG_WARN("server.loading", "bot {} is dead, respawning!", entry);
+                    bot->setDeathState(DeathState::JustRespawned);
                 }
 
                 LOG_DEBUG("server.loading", ">> Spawned npcbot {} (id: {}, map: {}, grid: {}, cell: {})", proto->Name.c_str(), entry, mapId, g.GetId(), c.GetId());
@@ -1003,6 +1014,13 @@ void BotDataMgr::LoadNpcBotGearStorage()
     } while (result->NextRow());
 
     LOG_INFO("server.loading", ">> Loaded {} NPCBot stored items for {} bot owners in {} ms", count, uint32(player_guids.size()), GetMSTimeDiffToNow(oldMSTime));
+}
+
+void BotDataMgr::DeleteOldLogs()
+{
+    uint32 month_cutoff = static_cast<uint32>(GameTime::GetGameTime().count() - static_cast<time_t>(BOT_LOG_KEEP_DAYS) * DAY);
+    CharacterDatabase.Execute("DELETE FROM `characters_npcbot_logs` WHERE timestamp IS NOT NULL AND timestamp < FROM_UNIXTIME({})", month_cutoff);
+    LOG_INFO("server.loading", "Deleting NPCBot log entries older than {} days...", BOT_LOG_KEEP_DAYS);
 }
 
 void BotDataMgr::LoadWanderMap(bool reload)
@@ -1288,7 +1306,7 @@ void BotDataMgr::LoadWanderMap(bool reload)
 
     std::set<WanderNode const*> tops;
     WanderNode::DoForAllWPs([&](WanderNode const* wp) {
-        if (tops.count(wp) == 0u && wp->GetLinks().size() == 1u)
+        if (!tops.contains(wp) && wp->GetLinks().size() == 1u)
         {
             LOG_DEBUG("server.loading", "Node {} ('{}') has single connection!", wp->GetWPId(), wp->GetName().c_str());
             WanderNode const* tn = wp->GetLinks().front();
@@ -1388,11 +1406,18 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
             for (auto const& real_bg_pair : kv.second._Battlegrounds)
             {
                 Battleground const* real_bg = real_bg_pair.second;
-                if (real_bg->GetInstanceID() != 0 && real_bg->GetBracketId() == bracketId &&
-                    real_bg->GetStatus() < STATUS_WAIT_LEAVE && real_bg->HasFreeSlots())
+                if (real_bg->GetInstanceID() != 0 && real_bg->GetBracketId() == bracketId && real_bg->GetStatus() < STATUS_WAIT_LEAVE && real_bg->HasFreeSlots())
                 {
-                    LOG_INFO("npcbots", "[Already running] Found running BG {} inited by player {} ({}). Not generating bots",
-                        uint32(bgTypeId), groupLeader->GetName().c_str(), groupLeader->GetGUID().GetCounter());
+                    if (real_bg->GetFreeSlotsForTeam(groupLeader->GetTeamId()) < gqinfo->Players.size())
+                    {
+                        LOG_INFO("npcbots", "[Already running 1] Found running non-full BG {} instance {}. Not generating bots: queuing group or player (leader {}) CANNOT join existing BG, prevent borrowing bots",
+                            uint32(bgTypeId), real_bg->GetInstanceID(), groupLeader->GetGUID().GetCounter());
+                    }
+                    else
+                    {
+                        LOG_INFO("npcbots", "[Already running 2] Found running non-full BG {} instance {}. Not generating bots: queuing group or player (leader {}) CAN join existing BG",
+                            uint32(bgTypeId), real_bg->GetInstanceID(), groupLeader->GetGUID().GetCounter());
+                    }
                     return true;
                 }
             }
@@ -1493,6 +1518,7 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
         sBattlegroundMgr->ScheduleQueueUpdate(ammr, atype, bgqTypeId, bgTypeId, bracketId);
     }, Seconds(2));
 
+    uint8 maxlevel = BotMgr::IsBotLevelCappedByConfigBGFirstPlayer() ? groupLeader->GetLevel() : 0;
     for (NpcBotRegistry const* registry3 : { &spawned_bots_a, &spawned_bots_h })
     {
         uint32 seconds_delay = 5;
@@ -1502,12 +1528,14 @@ bool BotDataMgr::GenerateBattlegroundBots(Player const* groupLeader, [[maybe_unu
             bot->GetBotAI()->canUpdate = false;
 
             const_cast<Creature*>(bot)->SetPvP(true);
+            if (maxlevel && bot->GetLevel() > maxlevel)
+                const_cast<Creature*>(bot)->SetLevel(maxlevel);
             queue->AddBotAsGroup(bot->GetGUID(), GetTeamIdForFaction(bot->GetFaction()),
                 bgTypeId, bracketEntry, atype, false, gqinfo->ArenaTeamRating, ammr);
 
             seconds_delay = std::min<uint32>(uint32(MINUTE * 2), seconds_delay + std::max<uint32>(1u, uint32((MINUTE / 2) / std::max<uint32>(needed_bots_count_a, needed_bots_count_h))));
 
-            BotBattlegroundEnterEvent* bbe = new BotBattlegroundEnterEvent(groupLeader->GetGUID(), bot->GetGUID(), bgqTypeId,
+            BotBattlegroundEnterEvent* bbe = new BotBattlegroundEnterEvent(groupLeader->GetGUID(), bot->GetGUID(), bgqTypeId, bgTypeId,
                 botBGJoinEvents[groupLeader->GetGUID()].CalculateTime(Milliseconds(uint32(INVITE_ACCEPT_WAIT_TIME) + uint32(BG_START_DELAY_2M)).count()));
             botBGJoinEvents[groupLeader->GetGUID()].AddEventAtOffset(bbe, Seconds(seconds_delay));
         }
@@ -1610,7 +1638,7 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
         if (skip)
             continue;
 
-        if (!!disabled_item_ids.count(proto.ItemId))
+        if (disabled_item_ids.contains(proto.ItemId))
         {
             //TC_LOG_INFO("server.loading", "Item %u is disabled...", proto.ItemId);
             continue;
@@ -1989,7 +2017,7 @@ void BotDataMgr::CreateWanderingBotsSortedGear()
                 {
                     uint32 minlvl = std::max<uint32>(lstep * ITEM_SORTING_LEVEL_STEP, 1);
                     uint32 maxlvl = (lstep + 1) * ITEM_SORTING_LEVEL_STEP - 1;
-                    LOG_WARN("server.loading", "No items for class {} slot {} at levels {}-{}!", c, s, minlvl, maxlvl);
+                    LOG_DEBUG("npcbots", "No items for class {} slot {} at levels {}-{}!", c, s, minlvl, maxlvl);
                 }
             }
         }
@@ -2075,7 +2103,7 @@ bool BotDataMgr::GenerateWanderingBotItemEnchants(Item* item, uint8 slot, uint8 
     //enchants
     SpellInfo const* sInfo;
     std::vector<uint32> valid_enchant_ids;
-    valid_enchant_ids.reserve(1u << 6);
+    valid_enchant_ids.reserve(1ULL << 6);
     switch (spec)
     {
         case BOT_SPEC_PALADIN_HOLY:
@@ -2305,15 +2333,19 @@ void BotDataMgr::UpdateNpcBotData(uint32 entry, NpcBotDataUpdateType updateType,
     switch (updateType)
     {
         case NPCBOT_UPDATE_OWNER:
+        {
             if (itr->second->owner == *(uint32*)(data))
                 break;
             itr->second->owner = *(uint32*)(data);
+            itr->second->hire_time = itr->second->owner ? uint64(time(0)) : 1ULL;
             bstmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NPCBOT_OWNER);
-            //"UPDATE characters_npcbot SET owner = ? WHERE entry = ?", CONNECTION_ASYNC
+            //"UPDATE characters_npcbot SET owner = ?, hire_time = FROM_UNIXTIME(?) WHERE entry = ?", CONNECTION_ASYNC
             bstmt->SetData(0, itr->second->owner);
-            bstmt->SetData(1, entry);
+            bstmt->SetData(1, itr->second->hire_time);
+            bstmt->SetData(2, entry);
             CharacterDatabase.Execute(bstmt);
             //break; //no break: erase transmogs
+        }
         [[fallthrough]];
         case NPCBOT_UPDATE_TRANSMOG_ERASE:
             bstmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_NPCBOT_TRANSMOG);
@@ -2458,30 +2490,36 @@ void BotDataMgr::UpdateNpcBotData(uint32 entry, NpcBotDataUpdateType updateType,
 }
 void BotDataMgr::UpdateNpcBotDataAll(uint32 playerGuid, NpcBotDataUpdateType updateType, void* data)
 {
+    CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
     CharacterDatabasePreparedStatement* bstmt;
+    uint32 newowner = *(uint32*)(data);
     switch (updateType)
     {
         case NPCBOT_UPDATE_OWNER:
-            bstmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NPCBOT_OWNER_ALL);
-            //"UPDATE characters_npcbot SET owner = ? WHERE owner = ?", CONNECTION_ASYNC
-            bstmt->SetData(0, *(uint32*)(data));
-            bstmt->SetData(1, playerGuid);
-            CharacterDatabase.Execute(bstmt);
-            //break; //no break: erase transmogs
-        [[fallthrough]];
-        case NPCBOT_UPDATE_TRANSMOG_ERASE:
+            ASSERT(newowner == 0);
+            bstmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NPCBOT_EQUIP_RESET_ALL);
+            //"UPDATE characters_npcbot SET equipMhEx = 0, equipOhEx = 0, equipRhEx = 0, equipHead = 0, equipShoulders = 0, equipChest = 0, equipWaist = 0, equipLegs = 0, equipFeet = 0, "
+            //"equipWrist = 0, equipHands = 0, equipBack = 0, equipBody = 0, equipFinger1 = 0, equipFinger2 = 0, equipTrinket1 = 0, equipTrinket2 = 0, equipNeck = 0 WHERE owner = ?", CONNECTION_ASYNC
+            bstmt->SetData(0, playerGuid);
+            trans->Append(bstmt);
             bstmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_NPCBOT_TRANSMOG_ALL);
             //"DELETE FROM characters_npcbot_transmog WHERE entry IN (SELECT entry FROM characters_npcbot WHERE owner = ?)", CONNECTION_ASYNC
             bstmt->SetData(0, playerGuid);
-            CharacterDatabase.Execute(bstmt);
+            trans->Append(bstmt);
+            bstmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_NPCBOT_OWNER_ALL);
+            //"UPDATE characters_npcbot SET owner = ?, hire_time = FROM_UNIXTIME(?) WHERE owner = ?", CONNECTION_ASYNC
+            bstmt->SetData(0, newowner);
+            bstmt->SetData(1, uint64(1ULL));
+            bstmt->SetData(2, playerGuid);
+            trans->Append(bstmt);
             break;
-        //case NPCBOT_UPDATE_ROLES:
-        //case NPCBOT_UPDATE_FACTION:
-        //case NPCBOT_UPDATE_EQUIPS:
         default:
             LOG_ERROR("sql.sql", "BotDataMgr:UpdateNpcBotDataAll: unhandled updateType {}", uint32(updateType));
             break;
     }
+
+    if (trans->GetSize() > 0)
+        CharacterDatabase.CommitTransaction(trans);
 }
 
 void BotDataMgr::SaveNpcBotStats(NpcBotStats const* stats)
@@ -2719,6 +2757,18 @@ uint8 BotDataMgr::GetOwnedBotsCount(ObjectGuid owner_guid, uint32 class_mask)
             ++count;
 
     return count;
+}
+
+uint8 BotDataMgr::GetAccountBotsCount(uint32 account_id)
+{
+    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_NPCBOT_ACC_BOT_COUNT);
+    stmt->SetData(0, account_id);
+
+    PreparedQueryResult result = CharacterDatabase.Query(stmt);
+    if (result)
+        return (*result)[0].Get<uint64>();
+
+    return 0;
 }
 
 uint8 BotDataMgr::GetLevelBonusForBotRank(uint32 rank)

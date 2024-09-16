@@ -69,10 +69,10 @@ public:
 
         void UpdateAI(uint32 diff) override
         {
-            if ((liveTimer += diff) >= MINION_DURATION)
+            if ((liveTimer += diff) >= MINION_DURATION * (IAmFree() ? 5u : 1u))
             {
                 canUpdate = false;
-                me->setDeathState(JUST_DIED);
+                me->setDeathState(DeathState::JustDied);
                 return;
             }
 

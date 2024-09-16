@@ -16,9 +16,9 @@
  */
 
 #include "GameTime.h"
+#include "InstanceMapScript.h"
 #include "InstanceScript.h"
 #include "Player.h"
-#include "ScriptMgr.h"
 #include "blackrock_depths.h"
 
 constexpr auto MAX_ENCOUNTER = 6;
@@ -471,7 +471,7 @@ public:
                         SetData(TYPE_RING_OF_LAW, NOT_STARTED);
                         break;
                     case DONE:
-                        for (const auto& itr : ArenaSpectators)
+                        for (auto const& itr : ArenaSpectators)
                         {
                             if (Creature* spectator = instance->GetCreature(itr))
                             {

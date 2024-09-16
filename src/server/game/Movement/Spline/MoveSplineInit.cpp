@@ -101,7 +101,9 @@ namespace Movement
             moveFlags = (moveFlags & ~(MOVEMENTFLAG_FORWARD)) | MOVEMENTFLAG_BACKWARD;
         }
 
-        if (moveFlags & MOVEMENTFLAG_ROOT)
+        bool isOrientationOnly = args.path.size() == 2 && args.path[0] == args.path[1];
+
+        if ((moveFlags & MOVEMENTFLAG_ROOT) || isOrientationOnly)
             moveFlags &= ~MOVEMENTFLAG_MASK_MOVING;
 
         if (!args.HasVelocity)
@@ -115,6 +117,11 @@ namespace Movement
                 moveFlagsForSpeed &= ~MOVEMENTFLAG_WALKING;
 
             args.velocity = unit->GetSpeed(SelectSpeedType(moveFlagsForSpeed));
+
+            //npcbot: do not emit an error if unit cannot move at all
+            if (!unit->CanFreeMove() && !(args.velocity > 0.01f))
+                return 0;
+            //end npcbot
         }
 
         // limit the speed in the same way the client does

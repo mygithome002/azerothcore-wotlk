@@ -179,7 +179,7 @@ public:
         void KilledUnit(Unit* u) override { bot_ai::KilledUnit(u); }
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override { bot_ai::EnterEvadeMode(why); }
         void MoveInLineOfSight(Unit* u) override { bot_ai::MoveInLineOfSight(u); }
-        void JustDied(Unit* u) override { KillAllLocusts(); bot_ai::JustDied(u); }
+        void JustDied(Unit* u) override { UnsummonLocusts(true); UnsummonAll(false); bot_ai::JustDied(u); }
 
         void DoNonCombatActions(uint32 diff)
         {
@@ -361,8 +361,8 @@ public:
             }
 
             CheckAttackState();
-            if (!me->IsAlive() || !mytar->IsAlive())
-                return;
+            //if (!me->IsAlive() || !mytar->IsAlive())
+            //    return;
         }
 
         void ApplyClassDamageMultiplierMeleeSpell(int32& damage, SpellNonMeleeDamage& /*damageinfo*/, SpellInfo const* spellInfo, WeaponAttackType /*attackType*/, bool /*iscrit*/) const override
@@ -627,28 +627,25 @@ public:
             _locusts[offset] = locust->GetGUID();
         }
 
-        void UnsummonAll() override
+        void UnsummonAll(bool savePets = true) override
         {
-            while (!_minions.empty())
-                (*_minions.begin())->ToTempSummon()->UnSummon();
-            for (ObjectGuid locust_guid : _locusts)
-            {
-                if (!locust_guid.IsEmpty())
-                {
-                    if (Creature* locust = ObjectAccessor::GetCreature(*me, locust_guid))
-                        locust->ToTempSummon()->UnSummon();
-                }
-            }
+            UnsummonCreatures(_minions, savePets);
+            UnsummonLocusts(false);
         }
 
-        void KillAllLocusts()
+        void UnsummonLocusts(bool kill)
         {
             for (ObjectGuid locust_guid : _locusts)
             {
                 if (!locust_guid.IsEmpty())
                 {
                     if (Creature* locust = ObjectAccessor::GetCreature(*me, locust_guid))
-                        locust->KillSelf(false);
+                    {
+                        if (kill)
+                           locust->KillSelf(false);
+                        else
+                            locust->ToTempSummon()->UnSummon();
+                    }
                 }
             }
         }
@@ -686,7 +683,7 @@ public:
             _carrionBeetlesCheckTimer = 0;
             _locustSwarmCheckTimer = 0;
 
-            UnsummonAll();
+            UnsummonAll(false);
 
             DefaultInit();
         }
@@ -817,7 +814,7 @@ public:
             static const uint32 ViableCreatureTypesMask =
                 (1 << (CREATURE_TYPE_BEAST-1)) | (1 << (CREATURE_TYPE_DRAGONKIN-1)) | (1 << (CREATURE_TYPE_HUMANOID-1));
 
-            return !c->IsAlive() && c->GetDisplayId() == c->GetNativeDisplayId() &&
+            return c->getDeathState() == DeathState::Corpse && c->GetDisplayId() == c->GetNativeDisplayId() &&
                 !c->IsVehicle() && !c->isWorldBoss() && !c->IsDungeonBoss() &&
                 ((1 << (c->GetCreatureType()-1)) & ViableCreatureTypesMask) &&
                 !c->IsControlledByPlayer() && !c->IsNPCBot();
@@ -827,7 +824,7 @@ public:
         uint32 _carrionBeetlesCheckTimer;
         uint32 _locustSwarmCheckTimer;
 
-        typedef std::set<Unit*> Summons;
+        typedef std::set<Creature*> Summons;
         Summons _minions;
         typedef std::vector<ObjectGuid> Swarm;
         Swarm _locusts;

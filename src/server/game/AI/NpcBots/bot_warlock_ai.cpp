@@ -240,7 +240,7 @@ public:
         void KilledUnit(Unit* u) override { bot_ai::KilledUnit(u); }
         void EnterEvadeMode(EvadeReason why = EVADE_REASON_OTHER) override { bot_ai::EnterEvadeMode(why); }
         void MoveInLineOfSight(Unit* u) override { bot_ai::MoveInLineOfSight(u); }
-        void JustDied(Unit* u) override { UnsummonAll(); bot_ai::JustDied(u); }
+        void JustDied(Unit* u) override { UnsummonAll(false); bot_ai::JustDied(u); }
         void DoNonCombatActions(uint32 diff)
         {
             if (GC_Timer > diff || me->IsMounted() || IsCasting() || Feasting() || Rand() > 20)
@@ -277,7 +277,7 @@ public:
                     return;
             }
 
-            if (!hasSoulstone && !IAmFree() && GetSpell(CREATE_SOULSTONE_1))
+            if (!hasSoulstone && GetSpell(CREATE_SOULSTONE_1))
             {
                 if (doCast(me, GetSpell(CREATE_SOULSTONE_1)))
                     return;
@@ -292,40 +292,41 @@ public:
 
             //TODO: soulstone on self/bots
             //BUG: players cannot accept this buff if they are below lvl 20 (should be 8)
-            if (!IAmFree() && hasSoulstone && soulstoneTimer <= diff && GetSpell(CREATE_SOULSTONE_1))
+            if (hasSoulstone && soulstoneTimer <= diff && GetSpell(CREATE_SOULSTONE_1))
             {
-                Group const* gr = master->GetGroup();
-                std::set<Unit*> targets;
-                if (!gr)
+                std::vector<Unit*> targets;
+
+                if (!IAmFree())
                 {
-                    if (master->IsAlive() && !master->isPossessed() && !master->IsCharmed() &&
-                        me->GetDistance(master) < 30 && !master->GetDummyAuraEffect(SPELLFAMILY_GENERIC, 92, 0))
-                        targets.insert(master);
-                }
-                else
-                {
-                    for (uint8 i = 0; i < 2 && !targets.empty(); ++i)
+                    std::vector<Unit*> all_members = BotMgr::GetAllGroupMembers(master->GetGroup());
+                    for (uint8 i = 0; i < 3; ++i)
                     {
-                        for (Unit* member : BotMgr::GetAllGroupMembers(gr))
+                        if (i > 0 && !targets.empty())
+                            break;
+                        for (Unit* member : all_members)
                         {
-                            if ((i == 0 ? member->IsPlayer() : member->IsNPCBot()) && me->GetMap() == member->FindMap() &&
+                            if ((i >= 2 || (i == 0 ? member->IsPlayer() : member->IsNPCBot())) && me->GetMap() == member->FindMap() &&
                                 member->IsAlive() && !member->isPossessed() && !member->IsCharmed() &&
                                 !(member->IsNPCBot() && member->ToCreature()->IsTempBot()) &&
                                 me->GetDistance(member) < 30 && !member->GetDummyAuraEffect(SPELLFAMILY_GENERIC, 92, 0))
                             {
-                                if (i > 0 || member->GetClass() == CLASS_PRIEST || member->GetClass() == CLASS_PALADIN ||
+                                if (i >= 2 || member->GetClass() == CLASS_PRIEST || member->GetClass() == CLASS_PALADIN ||
                                     member->GetClass() == CLASS_DRUID || member->GetClass() == CLASS_SHAMAN)
                                 {
-                                    targets.insert(member);
+                                    targets.push_back(member);
                                 }
                             }
                         }
                     }
                 }
 
+                if (targets.empty() && master->IsAlive() && !master->isPossessed() && !master->IsCharmed() &&
+                    me->GetDistance(master) < 30 && !master->GetDummyAuraEffect(SPELLFAMILY_GENERIC, 92, 0))
+                    targets.push_back(master);
+
                 if (!targets.empty())
                 {
-                    Unit* target = targets.size() == 1 ? *targets.begin() : Acore::Containers::SelectRandomContainerElement(targets);
+                    Unit* target = targets.size() == 1 ? targets.front() : Acore::Containers::SelectRandomContainerElement(targets);
                     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(CREATE_SOULSTONE_1);
                     uint32 rank = spellInfo->GetRank();
 
@@ -647,7 +648,7 @@ public:
                 uint32 healthStone = InitSpell(me, CREATE_HEALTHSTONE_1);
                 SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(healthStone);
                 //ASSERT(spellInfo);
-                uint32 rank = spellInfo->GetRank();
+                uint32 rank = spellInfo ? spellInfo->GetRank() : 1;
                 //ASSERT(rank >= 1 && rank <= 8);
                 spellInfo = sSpellMgr->GetSpellInfo(_healthStoneSpells[rank - 1]);
                 ASSERT(spellInfo);
@@ -1010,7 +1011,7 @@ public:
                 if (shot->GetSpellInfo()->Id == SHOOT_WAND && shot->m_targets.GetUnitTarget() != mytar)
                     me->InterruptSpell(CURRENT_AUTOREPEAT_SPELL);
             }
-            else if (IsSpellReady(SHOOT_WAND, diff) && me->GetDistance(mytar) < 30 && GetEquips(BOT_SLOT_RANGED) &&
+            else if (IsSpellReady(SHOOT_WAND, diff) && !me->isMoving() && me->GetDistance(mytar) < 30 && GetEquips(BOT_SLOT_RANGED) &&
                 doCast(mytar, SHOOT_WAND))
                 return;
         }
@@ -1704,7 +1705,7 @@ public:
         void SummonBotPet()
         {
             if (botPet)
-                UnsummonAll();
+                UnsummonAll(false);
 
             if (myPetType == BOT_PET_INVALID) //disabled
                 return;
@@ -1786,10 +1787,9 @@ public:
             botPet = myPet;
         }
 
-        void UnsummonAll() override
+        void UnsummonAll(bool savePets = true) override
         {
-            if (botPet)
-                botPet->ToTempSummon()->UnSummon();
+            UnsummonPet(savePets);
         }
 
         void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override
@@ -1855,7 +1855,7 @@ public:
                     break;
                 case BOTAI_MISC_PET_TYPE:
                     myPetType = value;
-                    UnsummonAll();
+                    UnsummonAll(false);
                     break;
                 default:
                     break;
@@ -1864,7 +1864,7 @@ public:
 
         void Reset() override
         {
-            UnsummonAll();
+            UnsummonAll(false);
 
             myPetType = 0;
 

@@ -15,19 +15,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "CreatureScript.h"
+#include "GridNotifiers.h"
+#include "Player.h"
+#include "SpellAuraEffects.h"
+#include "SpellMgr.h"
+#include "SpellScript.h"
+#include "SpellScriptLoader.h"
+#include "TemporarySummon.h"
 /*
  * Scripts for spells with SPELLFAMILY_PRIEST and SPELLFAMILY_GENERIC spells used by priest players.
  * Ordered alphabetically using scriptname.
  * Scriptnames of files in this file should be prefixed with "spell_pri_".
  */
-
-#include "GridNotifiers.h"
-#include "Player.h"
-#include "ScriptMgr.h"
-#include "SpellAuraEffects.h"
-#include "SpellMgr.h"
-#include "SpellScript.h"
-#include "TemporarySummon.h"
 
 enum PriestSpells
 {
@@ -118,7 +118,7 @@ class spell_pri_shadowfiend_scaling : public AuraScript
             amount = CalculatePct(std::max<int32>(0, shadow), 30);
 
             // xinef: Update appropriate player field
-            if (owner->GetTypeId() == TYPEID_PLAYER)
+            if (owner->IsPlayer())
                 owner->SetUInt32Value(PLAYER_PET_SPELL_POWER, (uint32)amount);
         }
     }
@@ -379,7 +379,7 @@ class spell_pri_lightwell : public SpellScript
 
     bool Load() override
     {
-        return GetCaster()->GetTypeId() == TYPEID_UNIT;
+        return GetCaster()->IsCreature();
     }
 
     void HandleScriptEffect(SpellEffIndex /* effIndex */)
@@ -438,7 +438,7 @@ class spell_pri_lightwell_renew : public AuraScript
                 UpdateData data;
                 WorldPacket packet;
                 caster->BuildValuesUpdateBlockForPlayer(&data, player);
-                data.BuildPacket(&packet);
+                data.BuildPacket(packet);
                 player->SendDirectMessage(&packet);
             }
         }
@@ -556,7 +556,7 @@ class spell_pri_penance : public SpellScript
         if (GetCaster() && GetCaster()->IsNPCBot())
             return true;
         //end npcbot
-        return GetCaster()->GetTypeId() == TYPEID_PLAYER;
+        return GetCaster()->IsPlayer();
     }
 
     bool Validate(SpellInfo const* spellInfo) override
@@ -790,7 +790,7 @@ class spell_pri_renew : public AuraScript
         if (GetCaster() && GetCaster()->IsNPCBot())
             return true;
         //end npcbot
-        return GetCaster() && GetCaster()->GetTypeId() == TYPEID_PLAYER;
+        return GetCaster() && GetCaster()->IsPlayer();
     }
 
     bool Validate(SpellInfo const* /*spellInfo*/) override

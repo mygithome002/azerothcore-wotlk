@@ -52,6 +52,7 @@ struct NpcBotData
     friend struct WanderingBotsGenerator;
 public:
     uint32 owner;
+    uint64 hire_time;
     uint32 roles;
     uint32 faction;
     uint8 spec;
@@ -59,7 +60,7 @@ public:
     DisabledSpellsContainer disabled_spells;
 
 private:
-    explicit NpcBotData(uint32 iroles, uint32 ifaction, uint8 ispec = 1) : owner(0), roles(iroles), faction(ifaction), spec(ispec)
+    explicit NpcBotData(uint32 iroles, uint32 ifaction, uint8 ispec = 1) : owner(0), hire_time(0), roles(iroles), faction(ifaction), spec(ispec)
     {
         for (uint8 i = 0; i != BOT_INVENTORY_SIZE; ++i)
             equips[i] = 0;
@@ -164,6 +165,8 @@ class BotDataMgr
         static void LoadNpcBotGroupData();
         static void LoadNpcBotGearStorage();
 
+        static void DeleteOldLogs();
+
         static void AddNpcBotData(uint32 entry, uint32 roles, uint8 spec, uint32 faction);
         static NpcBotData const* SelectNpcBotData(uint32 entry);
         static void UpdateNpcBotData(uint32 entry, NpcBotDataUpdateType updateType, void* data = nullptr);
@@ -188,6 +191,7 @@ class BotDataMgr
         static ObjectGuid GetNPCBotGuid(uint32 entry);
         static std::vector<uint32> GetExistingNPCBotIds();
         static uint8 GetOwnedBotsCount(ObjectGuid owner_guid, uint32 class_mask = 0);
+        static uint8 GetAccountBotsCount(uint32 account_id);
 
         static void DespawnWandererBot(uint32 entry);
         static void LoadWanderMap(bool reload = false);

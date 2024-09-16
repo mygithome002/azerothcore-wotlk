@@ -16,8 +16,9 @@
  */
 
 #include "CombatAI.h"
+#include "CreatureScript.h"
+#include "GameObjectScript.h"
 #include "Player.h"
-#include "ScriptMgr.h"
 #include "ScriptedCreature.h"
 #include "SpellInfo.h"
 #include "Vehicle.h"
