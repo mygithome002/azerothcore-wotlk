@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -19,6 +19,7 @@
 #include "ScriptedCreature.h"
 #include "TaskScheduler.h"
 #include "gruuls_lair.h"
+#include "SpellMgr.h"
 
 enum HighKingMaulgar
 {
@@ -63,17 +64,11 @@ enum HighKingMaulgar
 struct boss_high_king_maulgar : public BossAI
 {
     boss_high_king_maulgar(Creature* creature) : BossAI(creature, DATA_MAULGAR)
-    {
-        scheduler.SetValidator([this]
-        {
-            return !me->HasUnitState(UNIT_STATE_CASTING);
-        });
-    }
+    {    }
 
     void Reset() override
     {
         _Reset();
-        _recentlySpoken = false;
         me->SetLootMode(0);
         ScheduleHealthCheckEvent(50, [&]{
             Talk(SAY_ENRAGE);
@@ -91,18 +86,9 @@ struct boss_high_king_maulgar : public BossAI
         });
     }
 
-    void KilledUnit(Unit*  /*victim*/) override
+    void KilledUnit(Unit* /*victim*/) override
     {
-        if(!_recentlySpoken)
-        {
-            Talk(SAY_SLAY);
-            _recentlySpoken = true;
-        }
-
-        scheduler.Schedule(5s, [this](TaskContext)
-        {
-            _recentlySpoken = false;
-        });
+        Talk(SAY_SLAY);
     }
 
     void JustDied(Unit* /*killer*/) override
@@ -145,7 +131,7 @@ struct boss_high_king_maulgar : public BossAI
         {
             DoCastVictim(SPELL_MIGHTY_BLOW);
             context.Repeat(16200ms, 19s);
-        }).Schedule(67000ms, [this](TaskContext context)
+        }).Schedule(67s, [this](TaskContext context)
         {
             scheduler.DelayAll(15s);
             DoCastSelf(SPELL_WHIRLWIND);
@@ -162,8 +148,6 @@ struct boss_high_king_maulgar : public BossAI
 
         DoMeleeAttackIfReady();
     }
-private:
-    bool _recentlySpoken;
 };
 
 struct boss_olm_the_summoner : public ScriptedAI
@@ -185,15 +169,6 @@ struct boss_olm_the_summoner : public ScriptedAI
         _scheduler.CancelAll();
         summons.DespawnAll();
         instance->SetBossState(DATA_MAULGAR, NOT_STARTED);
-    }
-
-    void AttackStart(Unit* who) override
-    {
-        if (!who)
-            return;
-
-        if (me->Attack(who, true))
-            me->GetMotionMaster()->MoveChase(who, 25.0f);
     }
 
     void JustEngagedWith(Unit* /*who*/) override
@@ -267,7 +242,7 @@ struct boss_kiggler_the_crazed : public ScriptedAI
             return;
 
         if (me->Attack(who, true))
-            me->GetMotionMaster()->MoveChase(who, 25.0f);
+            me->GetMotionMaster()->MoveChase(who, 40.0f);
     }
 
     void JustEngagedWith(Unit* /*who*/) override
@@ -285,16 +260,7 @@ struct boss_kiggler_the_crazed : public ScriptedAI
             context.Repeat(7200ms, 20600ms);
         }).Schedule(23s, [this](TaskContext context)
         {
-            //changed to work similarly to Ikiss poly
-            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(SPELL_GREATER_POLYMORPH);
-            if (Unit* target = SelectTarget(SelectTargetMethod::MaxThreat, 1, [&]
-            (Unit* target) -> bool
-                {
-                    return target && !target->IsImmunedToSpell(spellInfo);
-                }))
-            {
-                DoCast(target, SPELL_GREATER_POLYMORPH);
-            }
+            DoCastVictim(SPELL_GREATER_POLYMORPH);
             context.Repeat(10900ms);
         }).Schedule(30s, [this](TaskContext context)
         {
@@ -355,7 +321,7 @@ struct boss_blindeye_the_seer : public ScriptedAI
                 DoCast(target, SPELL_HEAL);
             }
             context.Repeat(7200ms);
-        }).Schedule(37500s, [this](TaskContext context)
+        }).Schedule(37500ms, [this](TaskContext context)
         {
             DoCastSelf(SPELL_GREATER_PW_SHIELD);
             _scheduler.Schedule(1200ms, [this](TaskContext)

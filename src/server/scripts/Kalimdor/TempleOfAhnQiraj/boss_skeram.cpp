@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -16,6 +16,7 @@
  */
 
 #include "CreatureScript.h"
+#include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellScript.h"
 #include "SpellScriptLoader.h"
@@ -95,7 +96,7 @@ struct boss_skeram : public BossAI
         creature->CastSpell(creature, SPELL_BIRTH, true);
         creature->SetControlled(true, UNIT_STATE_ROOT);
         creature->SetReactState(REACT_PASSIVE);
-        creature->SetImmuneToAll(true);
+        creature->SetImmuneToAll(true, true);
 
         _copiesGUIDs.push_back(creature->GetGUID());
     }
@@ -142,7 +143,7 @@ struct boss_skeram : public BossAI
             me->RemoveCorpse();
     }
 
-    void JustEngagedWith(Unit* /*who*/) override
+    void JustEngagedWith(Unit* who) override
     {
         _JustEngagedWith();
         events.Reset();
@@ -154,7 +155,9 @@ struct boss_skeram : public BossAI
 
         if (!me->IsSummon())
         {
-            Talk(SAY_AGGRO);
+            // Resolve pets/guardians to their owner so gendered locales resolve $g against the puller
+            Unit* puller = who->GetCharmerOrOwnerPlayerOrPlayerItself();
+            Talk(SAY_AGGRO, puller ? puller : who);
         }
     }
 
@@ -211,7 +214,7 @@ struct boss_skeram : public BossAI
             _copiesGUIDs.clear();
             DoCast(me, SPELL_SUMMON_IMAGES, true);
             me->SetReactState(REACT_PASSIVE);
-            me->SetImmuneToAll(true);
+            me->SetImmuneToAll(true, true);
             me->SetControlled(true, UNIT_STATE_ROOT);
             Talk(SAY_SPLIT);
             _hpct -= 25.0f;

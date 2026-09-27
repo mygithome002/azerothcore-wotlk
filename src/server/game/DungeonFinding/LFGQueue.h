@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -17,8 +17,6 @@
 
 #ifndef _LFGQUEUE_H
 #define _LFGQUEUE_H
-
-#include <utility>
 
 #include "LFG.h"
 
@@ -33,6 +31,7 @@ namespace lfg
         LFG_INCOMPATIBLES_HAS_IGNORES,
         LFG_INCOMPATIBLES_NO_ROLES,
         LFG_INCOMPATIBLES_NO_DUNGEONS,
+        LFG_INCOMPATIBLES_REJECTED_BY_SCRIPT,
         LFG_COMPATIBLES_WITH_LESS_PLAYERS,                     // Values under this = not compatible (do not modify order)
         LFG_COMPATIBLES_MATCH                                  // Must be the last one
     };
@@ -105,8 +104,8 @@ namespace lfg
         uint32 FindBestCompatibleInQueue(LfgQueueDataContainer::iterator itrQueue);
         void UpdateBestCompatibleInQueue(LfgQueueDataContainer::iterator itrQueue, Lfg5Guids const& key);
 
-        LfgCompatibility FindNewGroups(const ObjectGuid& newGuid);
-        LfgCompatibility CheckCompatibility(Lfg5Guids const& checkWith, const ObjectGuid& newGuid, uint64& foundMask, uint32& foundCount, const std::set<Lfg5Guids>& currentCompatibles);
+        LfgCompatibility FindNewGroups(ObjectGuid const& newGuid);
+        LfgCompatibility CheckCompatibility(Lfg5Guids const& checkWith, ObjectGuid const& newGuid, uint64& foundMask, uint32& foundCount, std::set<Lfg5Guids> const& currentCompatibles);
 
         // Queue
         uint32 m_QueueStatusTimer;                         // used to check interval of sending queue status

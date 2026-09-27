@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -27,6 +27,7 @@
 #include <map>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 struct InstanceTemplate;
 struct MapEntry;
@@ -103,12 +104,37 @@ private:
 
 typedef std::unordered_map<uint32 /*PAIR32(map, difficulty)*/, time_t /*resetTime*/> ResetTimeByMapDifficultyMap;
 
+// Raw rows fetched on a worker thread by LoadInstanceSavesAndBindsForMapIDs.
+// Contains no manager-owned state, so it is safe to build off the world thread
+// and consume later on the world thread in MergeWithNewInstanceSaves.
+struct InstanceMapLoadRows
+{
+    struct InstanceRow
+    {
+        uint32 instanceId;
+        uint16 mapId;
+        time_t resetTime;
+        uint8 difficulty;
+        uint32 completedEncounters;
+        std::string data;
+    };
+    struct BindRow
+    {
+        uint32 guidLow;
+        uint32 instanceId;
+        bool perm;
+        bool extended;
+    };
+    std::vector<InstanceRow> instances;
+    std::vector<BindRow> binds;
+};
+
 class InstanceSaveMgr
 {
     friend class InstanceSave;
 
 private:
-    InstanceSaveMgr()  = default;;
+    InstanceSaveMgr()  = default;
     ~InstanceSaveMgr();
 
 public:
@@ -132,6 +158,11 @@ public:
     void LoadResetTimes();
     void LoadInstanceSaves();
     void LoadCharacterBinds();
+
+    // Worker thread: performs only the (blocking) DB reads, touches no manager state.
+    [[nodiscard]] InstanceMapLoadRows LoadInstanceSavesAndBindsForMapIDs(std::vector<uint32> const& mapIDs);
+    // World thread: builds InstanceSaves and player binds from the fetched rows and merges them in.
+    void MergeWithNewInstanceSaves(InstanceMapLoadRows const& loadResult);
 
     [[nodiscard]] time_t GetResetTimeFor(uint32 mapid, Difficulty d) const
     {

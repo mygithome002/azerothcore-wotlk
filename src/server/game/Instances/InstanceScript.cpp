@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -28,8 +28,10 @@
 #include "Opcodes.h"
 #include "Pet.h"
 #include "Player.h"
+#include "RBAC.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
+#include "TC9Sidecar.h"
 #include "WorldSession.h"
 
 //npcbot
@@ -44,6 +46,9 @@ BossBoundaryData::~BossBoundaryData()
 
 void InstanceScript::SaveToDB()
 {
+    if (sToCloud9Sidecar->ClusterModeEnabled() && !sToCloud9Sidecar->IsMapAssigned(instance->GetEntry()->MapID))
+        return;
+
     std::string data = GetSaveData();
     //if (data.empty()) // pussywizard: encounterMask can be updated and theres no reason to not save
     //    return;
@@ -59,10 +64,25 @@ void InstanceScript::SaveToDB()
     CharacterDatabase.Execute(stmt);
 }
 
+void InstanceScript::OnPlayerEnter(Player* player)
+{
+    if (sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP) && IsTwoFactionInstance())
+        player->SetFaction((_teamIdInInstance == TEAM_HORDE) ? 1610 /*FACTION_HORDE*/ : 1 /*FACTION_ALLIANCE*/);
+}
+
+void InstanceScript::OnPlayerLeave(Player* player)
+{
+    if (sWorld->getBoolConfig(CONFIG_ALLOW_TWO_SIDE_INTERACTION_GROUP) && IsTwoFactionInstance())
+        player->SetFactionForRace(player->getRace());
+}
+
 void InstanceScript::OnCreatureCreate(Creature* creature)
 {
     AddObject(creature);
     AddMinion(creature);
+
+    if (creature->IsSummon())
+        SetSummoner(creature);
 }
 
 void InstanceScript::OnCreatureRemove(Creature* creature)
@@ -123,6 +143,11 @@ void InstanceScript::HandleGameObject(ObjectGuid GUID, bool open, GameObject* go
     }
 }
 
+void InstanceScript::HandleGameObject(uint32 type, bool open)
+{
+    HandleGameObject(ObjectGuid::Empty, open, GetGameObject(type));
+}
+
 bool InstanceScript::IsEncounterInProgress() const
 {
     for (std::vector<BossInfo>::const_iterator itr = bosses.begin(); itr != bosses.end(); ++itr)
@@ -132,7 +157,7 @@ bool InstanceScript::IsEncounterInProgress() const
     return false;
 }
 
-void InstanceScript::LoadBossBoundaries(const BossBoundaryData& data)
+void InstanceScript::LoadBossBoundaries(BossBoundaryData const& data)
 {
     for (BossBoundaryEntry const& entry : data)
         if (entry.bossId < bosses.size())
@@ -150,7 +175,7 @@ void InstanceScript::SetHeaders(std::string const& dataHeaders)
     }
 }
 
-void InstanceScript::LoadMinionData(const MinionData* data)
+void InstanceScript::LoadMinionData(MinionData const* data)
 {
     while (data->entry)
     {
@@ -162,7 +187,7 @@ void InstanceScript::LoadMinionData(const MinionData* data)
     LOG_DEBUG("scripts.ai", "InstanceScript::LoadMinionData: {} minions loaded.", uint64(minions.size()));
 }
 
-void InstanceScript::LoadDoorData(const DoorData* data)
+void InstanceScript::LoadDoorData(DoorData const* data)
 {
     while (data->entry)
     {
@@ -194,6 +219,15 @@ void InstanceScript::LoadObjectData(ObjectData const* data, ObjectInfoMap& objec
     while (data->entry)
     {
         objectInfo[data->entry] = data->type;
+        ++data;
+    }
+}
+
+void InstanceScript::LoadSummonData(ObjectData const* data)
+{
+    while (data->entry)
+    {
+        _summonInfo[data->entry] = data->type;
         ++data;
     }
 }
@@ -352,11 +386,28 @@ void InstanceScript::RemoveMinion(Creature* minion)
     AddMinion(minion, false);
 }
 
+void InstanceScript::SetSummoner(Creature* creature)
+{
+    auto const& summonData = _summonInfo.find(creature->GetEntry());
+
+    if (summonData != _summonInfo.end())
+        if (Creature* summoner = GetCreature(summonData->second))
+            if (summoner->IsAIEnabled)
+                summoner->AI()->JustSummoned(creature);
+}
+
+bool InstanceScript::_SkipCheckRequiredBosses(Player const* player /*= nullptr*/) const
+{
+    return player && player->GetSession()->HasPermission(rbac::RBAC_PERM_SKIP_CHECK_INSTANCE_REQUIRED_BOSSES);
+}
+
 bool InstanceScript::SetBossState(uint32 id, EncounterState state)
 {
     if (id < bosses.size())
     {
         BossInfo* bossInfo = &bosses[id];
+        MinionSet minions = bossInfo->minion;
+
         sScriptMgr->OnBeforeSetBossState(id, state, bossInfo->state, instance);
         if (bossInfo->state == TO_BE_DECIDED) // loading
         {
@@ -369,8 +420,8 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
                 return false;
 
             if (state == DONE)
-                for (MinionSet::iterator i = bossInfo->minion.begin(); i != bossInfo->minion.end(); ++i)
-                    if ((*i)->isWorldBoss() && (*i)->IsAlive())
+                for (Creature* minion : minions)
+                    if (minion && minion->isWorldBoss() && minion->IsAlive())
                         return false;
 
             bossInfo->state = state;
@@ -381,8 +432,9 @@ bool InstanceScript::SetBossState(uint32 id, EncounterState state)
             for (DoorSet::iterator i = bossInfo->door[type].begin(); i != bossInfo->door[type].end(); ++i)
                 UpdateDoorState(*i);
 
-        for (MinionSet::iterator i = bossInfo->minion.begin(); i != bossInfo->minion.end(); ++i)
-            UpdateMinionState(*i, state);
+        for (Creature* minion : minions)
+            if (minion)
+                UpdateMinionState(minion, state);
 
         return true;
     }
@@ -397,7 +449,11 @@ void InstanceScript::StorePersistentData(uint32 index, uint32 data)
         return;
     }
 
-    persistentData[index] = data;
+    if (persistentData[index] != data)
+    {
+        persistentData[index] = data;
+        SaveToDB();
+    }
 }
 
 void InstanceScript::DoForAllMinions(uint32 id, std::function<void(Creature*)> exec)
@@ -414,7 +470,7 @@ void InstanceScript::DoForAllMinions(uint32 id, std::function<void(Creature*)> e
     }
 }
 
-void InstanceScript::Load(const char* data)
+void InstanceScript::Load(char const* data)
 {
     if (!data)
     {
@@ -560,6 +616,12 @@ void InstanceScript::DoRespawnGameObject(ObjectGuid uiGuid, uint32 uiTimeToDespa
     }
     else
         LOG_DEBUG("scripts", "InstanceScript: DoRespawnGameObject failed");
+}
+
+void InstanceScript::DoRespawnGameObject(uint32 type)
+{
+    if (GameObject* go = instance->GetGameObject(GetObjectGuid(type)))
+        go->Respawn();
 }
 
 void InstanceScript::DoRespawnCreature(ObjectGuid guid, bool force)
@@ -799,6 +861,24 @@ void InstanceScript::LoadInstanceSavedGameobjectStateData()
     }
 }
 
+bool InstanceScript::AllBossesDone() const
+{
+    for (auto const& boss : bosses)
+        if (boss.state != DONE)
+            return false;
+
+    return true;
+}
+
+bool InstanceScript::AllBossesDone(std::initializer_list<uint32> bossIds) const
+{
+    for (auto const& bossId : bossIds)
+        if (!IsBossDone(bossId))
+            return false;
+
+    return true;
+}
+
 std::string InstanceScript::GetBossStateName(uint8 state)
 {
     // See enum EncounterState in InstanceScript.h
@@ -838,6 +918,24 @@ bool InstanceHasScript(WorldObject const* obj, char const* scriptName)
     if (InstanceMap* instance = obj->GetMap()->ToInstanceMap())
     {
         return instance->GetScriptName() == scriptName;
+    }
+
+    return false;
+}
+
+bool InstanceScript::IsTwoFactionInstance() const
+{
+    switch (instance->GetId())
+    {
+        case 540: // Shattered Halls
+        case 576: // Nexus
+        case 631: // Icecrown Citadel
+        case 632: // Forge of Souls
+        case 649: // Trial of the Champion
+        case 650: // Trial of the Crusader
+        case 658: // Pit of Saron
+        case 668: // Halls of Reflection
+            return true;
     }
 
     return false;

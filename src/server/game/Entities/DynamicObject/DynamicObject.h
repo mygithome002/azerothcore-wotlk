@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -31,10 +31,10 @@ enum DynamicObjectType
     DYNAMIC_OBJECT_FARSIGHT_FOCUS   = 0x2,
 };
 
-class DynamicObject : public WorldObject, public GridObject<DynamicObject>, public MovableMapObject
+class DynamicObject : public WorldObject, public GridObject<DynamicObject>, public MovableMapObject, public UpdatableMapObject
 {
 public:
-    DynamicObject(bool isWorldObject);
+    DynamicObject();
     ~DynamicObject() override;
 
     void AddToWorld() override;
@@ -52,15 +52,19 @@ public:
     void RemoveAura();
     void SetCasterViewpoint(bool updateViewerVisibility);
     void RemoveCasterViewpoint();
+    [[nodiscard]] uint32 GetFaction() const override;
     [[nodiscard]] Unit* GetCaster() const { return _caster; }
     void BindToCaster();
     void UnbindFromCaster();
     [[nodiscard]] uint32 GetSpellId() const {  return GetUInt32Value(DYNAMICOBJECT_SPELLID); }
+    [[nodiscard]] ObjectGuid GetOwnerGUID() const override { return GetCasterGUID(); }
     [[nodiscard]] ObjectGuid GetCasterGUID() const { return GetGuidValue(DYNAMICOBJECT_CASTER); }
     [[nodiscard]] float GetRadius() const { return GetFloatValue(DYNAMICOBJECT_RADIUS); }
     [[nodiscard]] bool IsViewpoint() const { return _isViewpoint; }
 
     ObjectGuid const& GetOldFarsightGUID() const { return _oldFarsightGUID; }
+
+    bool IsUpdateNeeded() override;
 
 protected:
     Aura* _aura;

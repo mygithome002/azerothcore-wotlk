@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,8 +23,6 @@
 #include <array>
 #include <string>
 #include <string_view>
-#include <type_traits>
-#include <utility>
 
 struct AchievementEntry;
 struct GlyphPropertiesEntry;
@@ -87,6 +85,13 @@ namespace Acore::Hyperlinks
         uint16 MaxValue;
         ObjectGuid Owner;
         std::string KnownRecipes;
+    };
+
+    // "found" link: |cffffff00|Hfound:<rawguid>:<entry>:|h[name]|h|r - a world object, shift-clicked back as a command
+    struct FoundLinkData
+    {
+        uint64 RawGuid;
+        uint32 Entry;
     };
 
     namespace LinkTags
@@ -170,6 +175,13 @@ namespace Acore::Hyperlinks
             using value_type = SpellInfo const*;
             static constexpr std::string_view tag() { return "enchant"; }
             static bool StoreTo(SpellInfo const*& val, std::string_view data);
+        };
+
+        struct AC_GAME_API found
+        {
+            using value_type = FoundLinkData const&;
+            static constexpr std::string_view tag() { return "found"; }
+            static bool StoreTo(FoundLinkData& val, std::string_view data);
         };
 
         struct AC_GAME_API glyph

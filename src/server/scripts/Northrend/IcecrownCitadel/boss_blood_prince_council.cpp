@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,6 +22,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellScriptLoader.h"
 #include "icecrown_citadel.h"
+#include "PassiveAI.h"
 
 enum Texts
 {
@@ -100,6 +101,8 @@ enum Spells
     SPELL_KINETIC_BOMB                  = 72080,
     SPELL_SHOCK_VORTEX                  = 72037,
     SPELL_EMPOWERED_SHOCK_VORTEX        = 72039,
+    SPELL_REMOVE_EMPOWERED_BLOOD        = 72131,
+    SPELL_CLEAR_ALL_STATUS_AILMENTS     = 70939,
 
     // Kinetic Bomb
     SPELL_UNSTABLE                      = 72059,
@@ -232,6 +235,7 @@ public:
             _isEmpowered = false;
             _evading = false;
             me->SetHealth(me->GetMaxHealth());
+            me->CastSpell(me, SPELL_REMOVE_EMPOWERED_BLOOD, true);
             me->SetReactState(REACT_AGGRESSIVE);
         }
 
@@ -260,6 +264,7 @@ public:
                 me->SetLootRecipient(who);
             me->LowerPlayerDamageReq(me->GetMaxHealth());
             me->SetReactState(REACT_AGGRESSIVE);
+            DoCastSelf(SPELL_CLEAR_ALL_STATUS_AILMENTS, true);
             instance->SendEncounterUnit(ENCOUNTER_FRAME_ENGAGE, me);
 
             if (Creature* taldaram = ObjectAccessor::GetCreature(*me, instance->GetGuidData(DATA_PRINCE_TALDARAM_GUID)))
@@ -341,7 +346,7 @@ public:
             }
         }
 
-        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/) override
+        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/, SpellSchoolMask /*damageSchoolMask*/) override
         {
             if (!target->IsPlayer())
                 return;
@@ -374,7 +379,7 @@ public:
                     me->RemoveUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
                     me->SetReactState(REACT_AGGRESSIVE);
                     me->ForceValuesUpdateAtIndex(UNIT_NPC_FLAGS);   // was in sniff. don't ask why
-                    me->m_Events.AddEvent(new StandUpEvent(*me), me->m_Events.CalculateTime(1000));
+                    me->m_Events.AddEventAtOffset(new StandUpEvent(*me), 1s);
                     DoAction(ACTION_REMOVE_INVOCATION);
                     me->SetHealth(1);
                     break;
@@ -611,7 +616,7 @@ public:
             }
         }
 
-        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/) override
+        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/, SpellSchoolMask /*damageSchoolMask*/) override
         {
             if (!target->IsPlayer())
                 return;
@@ -644,7 +649,7 @@ public:
                     me->RemoveUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
                     me->SetReactState(REACT_AGGRESSIVE);
                     me->ForceValuesUpdateAtIndex(UNIT_NPC_FLAGS);   // was in sniff. don't ask why
-                    me->m_Events.AddEvent(new StandUpEvent(*me), me->m_Events.CalculateTime(1000));
+                    me->m_Events.AddEventAtOffset(new StandUpEvent(*me), 1s);
                     DoAction(ACTION_REMOVE_INVOCATION);
                     me->SetHealth(1);
                     break;
@@ -862,20 +867,25 @@ public:
                     Unit::Kill(taldaram, taldaram);
         }
 
+        void ResetPrince()
+        {
+            _canDie = true;
+            me->setActive(false);
+            instance->SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, me);
+            me->SetHealth(me->GetMaxHealth());
+            DoAction(ACTION_CAST_INVOCATION);
+        }
+
         void JustRespawned() override
         {
             BossAI::JustRespawned();
-            JustReachedHome();
+            ResetPrince();
         }
 
         void JustReachedHome() override
         {
-            _canDie = true;
-            me->setActive(false);
+            ResetPrince();
             instance->SetBossState(DATA_BLOOD_PRINCE_COUNCIL, FAIL);
-            instance->SendEncounterUnit(ENCOUNTER_FRAME_DISENGAGE, me);
-            me->SetHealth(me->GetMaxHealth());
-            DoAction(ACTION_CAST_INVOCATION);
         }
 
         void JustSummoned(Creature* summon) override
@@ -888,7 +898,7 @@ public:
                     summon->CastSpell(summon, SPELL_KINETIC_BOMB, true, nullptr, nullptr, me->GetGUID());
                     break;
                 case NPC_SHOCK_VORTEX:
-                    summon->m_Events.AddEvent(new ShockVortexExplodeEvent(*summon), summon->m_Events.CalculateTime(4500));
+                    summon->m_Events.AddEventAtOffset(new ShockVortexExplodeEvent(*summon), 4500ms);
                     break;
                 default:
                     break;
@@ -905,7 +915,7 @@ public:
             }
         }
 
-        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/) override
+        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/, SpellSchoolMask /*damageSchoolMask*/) override
         {
             if (!target->IsPlayer())
                 return;
@@ -938,7 +948,7 @@ public:
                     me->RemoveUnitFlag2(UNIT_FLAG2_FEIGN_DEATH);
                     me->SetReactState(REACT_AGGRESSIVE);
                     me->ForceValuesUpdateAtIndex(UNIT_NPC_FLAGS);   // was in sniff. don't ask why
-                    me->m_Events.AddEvent(new StandUpEvent(*me), me->m_Events.CalculateTime(1000));
+                    me->m_Events.AddEventAtOffset(new StandUpEvent(*me), 1s);
                     me->SetHealth(me->GetMaxHealth());
                     DoAction(ACTION_CAST_INVOCATION);
                     break;
@@ -1212,7 +1222,7 @@ public:
 
         void JustDied(Unit* /*killer*/) override
         {
-            me->DespawnOrUnsummon(1);
+            me->DespawnOrUnsummon(1ms);
         }
 
         void UpdateAI(uint32 diff) override
@@ -1286,13 +1296,13 @@ public:
                 me->SetControlled(true, UNIT_STATE_ROOT);
                 me->StopMoving();
                 me->CastSpell(me, SPELL_FLAMES, true);
-                me->DespawnOrUnsummon(999);
+                me->DespawnOrUnsummon(999ms);
                 me->CastSpell(me, SPELL_FLAME_SPHERE_DEATH_EFFECT, true);
                 _exploded = true;
             }
         }
 
-        void SetGUID(ObjectGuid guid, int32 /*type*/) override
+        void SetGUID(ObjectGuid const& guid, int32 /*type*/) override
         {
             _chaseGUID = guid;
         }
@@ -1330,10 +1340,10 @@ public:
                 me->SetInCombatWithZone();
                 return;
             }
-            me->DespawnOrUnsummon(1);
+            me->DespawnOrUnsummon(1ms);
         }
 
-        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/) override
+        void DamageDealt(Unit* target, uint32& damage, DamageEffectType  /*damageType*/, SpellSchoolMask /*damageSchoolMask*/) override
         {
             if (!target->IsPlayer())
             {
@@ -1423,7 +1433,7 @@ public:
                 case EVENT_BOMB_DESPAWN:
                     me->RemoveAllAuras();
                     me->SetUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
-                    me->DespawnOrUnsummon(exploded ? 5000 : 0);
+                    me->DespawnOrUnsummon(exploded ? 5s : 0ms);
                     break;
                 case EVENT_CONTINUE_FALLING:
                     me->GetMotionMaster()->MovementExpired(false);
@@ -1539,6 +1549,21 @@ class spell_taldaram_ball_of_inferno_flame : public SpellScript
     void Register() override
     {
         AfterHit += SpellHitFn(spell_taldaram_ball_of_inferno_flame::ModAuraStack);
+    }
+};
+
+class spell_taldaram_ball_of_inferno_flame_aura : public AuraScript
+{
+    PrepareAuraScript(spell_taldaram_ball_of_inferno_flame_aura);
+
+    void HandleStackDrop(ProcEventInfo& /*eventInfo*/)
+    {
+        ModStackAmount(-1);
+    }
+
+    void Register() override
+    {
+        OnProc += AuraProcFn(spell_taldaram_ball_of_inferno_flame_aura::HandleStackDrop);
     }
 };
 
@@ -1672,7 +1697,7 @@ class spell_blood_council_summon_shadow_resonance : public SpellScript
                     summoner->GetPositionZ() + 10.0f, summoner->GetPhaseMask(), LINEOFSIGHT_ALL_CHECKS, VMAP::ModelIgnoreFlags::Nothing) &&
                     destX > 4585.0f && destY > 2716.0f && destY < 2822.0f)
                 {
-                    float destZ = summoner->GetMapHeight(summoner->GetPhaseMask(), destX, destY, summoner->GetPositionZ());
+                    float destZ = summoner->GetMapHeight(destX, destY, summoner->GetPositionZ());
                     if (std::fabs(destZ - summoner->GetPositionZ()) < 10.0f) // valid z found
                     {
                         dest._position.Relocate(destX, destY, destZ);
@@ -1703,7 +1728,7 @@ void AddSC_boss_blood_prince_council()
     RegisterSpellScript(spell_blood_council_shadow_prison_damage);
     RegisterSpellScript(spell_taldaram_glittering_sparks);
     RegisterSpellScript(spell_taldaram_summon_flame_ball);
-    RegisterSpellScript(spell_taldaram_ball_of_inferno_flame);
+    RegisterSpellAndAuraScriptPair(spell_taldaram_ball_of_inferno_flame, spell_taldaram_ball_of_inferno_flame_aura);
     RegisterSpellAndAuraScriptPair(spell_valanar_kinetic_bomb, spell_valanar_kinetic_bomb_aura);
     RegisterSpellScript(spell_valanar_kinetic_bomb_absorb_aura);
     RegisterSpellScript(spell_valanar_kinetic_bomb_knockback);

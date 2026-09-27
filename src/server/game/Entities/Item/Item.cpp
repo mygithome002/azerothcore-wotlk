@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -17,7 +17,6 @@
 
 #include "Item.h"
 #include "Common.h"
-#include "ConditionMgr.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "ItemEnchantmentMgr.h"
@@ -27,6 +26,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "StringConvert.h"
+#include "TC9Sidecar.h"
 #include "Tokenize.h"
 #include "WorldPacket.h"
 
@@ -349,7 +349,7 @@ void Item::SaveToDB(CharacterDatabaseTransaction trans)
                 uint8 index = 0;
                 CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(uState == ITEM_NEW ? CHAR_REP_ITEM_INSTANCE : CHAR_UPD_ITEM_INSTANCE);
                 stmt->SetData(  index, GetEntry());
-                stmt->SetData(++index, GetOwnerGUID().GetCounter());
+                stmt->SetData(++index, GetOwnerGUID().GetRawValue());
                 stmt->SetData(++index, GetGuidValue(ITEM_FIELD_CREATOR).GetCounter());
                 stmt->SetData(++index, GetGuidValue(ITEM_FIELD_GIFTCREATOR).GetCounter());
                 stmt->SetData(++index, GetCount());
@@ -382,7 +382,7 @@ void Item::SaveToDB(CharacterDatabaseTransaction trans)
                 if ((uState == ITEM_CHANGED) && IsWrapped())
                 {
                     stmt = CharacterDatabase.GetPreparedStatement(CHAR_UPD_GIFT_OWNER);
-                    stmt->SetData(0, GetOwnerGUID().GetCounter());
+                    stmt->SetData(0, GetOwnerGUID().GetRawValue());
                     stmt->SetData(1, guid);
                     trans->Append(stmt);
                 }
@@ -1015,8 +1015,11 @@ bool Item::HasSocket() const
 uint8 Item::GetGemCountWithID(uint32 GemID) const
 {
     uint8 count = 0;
-    for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot < SOCK_ENCHANTMENT_SLOT + MAX_GEM_SOCKETS; ++enchant_slot)
+    for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot <= PRISMATIC_ENCHANTMENT_SLOT; ++enchant_slot)
     {
+        if (enchant_slot == BONUS_ENCHANTMENT_SLOT)
+            continue;
+
         uint32 enchant_id = GetEnchantmentId(EnchantmentSlot(enchant_slot));
         if (!enchant_id)
             continue;
@@ -1034,8 +1037,11 @@ uint8 Item::GetGemCountWithID(uint32 GemID) const
 uint8 Item::GetGemCountWithLimitCategory(uint32 limitCategory) const
 {
     uint8 count = 0;
-    for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot < SOCK_ENCHANTMENT_SLOT + MAX_GEM_SOCKETS; ++enchant_slot)
+    for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot <= PRISMATIC_ENCHANTMENT_SLOT; ++enchant_slot)
     {
+        if (enchant_slot == BONUS_ENCHANTMENT_SLOT)
+            continue;
+
         uint32 enchant_id = GetEnchantmentId(EnchantmentSlot(enchant_slot));
         if (!enchant_id)
             continue;
@@ -1067,7 +1073,7 @@ void Item::SendUpdateSockets()
     for (uint32 i = SOCK_ENCHANTMENT_SLOT; i <= BONUS_ENCHANTMENT_SLOT; ++i)
         data << uint32(GetEnchantmentId(EnchantmentSlot(i)));
 
-    GetOwner()->GetSession()->SendPacket(&data);
+    GetOwner()->SendDirectMessage(&data);
 }
 
 // Though the client has the information in the item's data field,
@@ -1082,7 +1088,7 @@ void Item::SendTimeUpdate(Player* owner)
     WorldPacket data(SMSG_ITEM_TIME_UPDATE, (8 + 4));
     data << GetGUID();
     data << uint32(duration);
-    owner->GetSession()->SendPacket(&data);
+    owner->SendDirectMessage(&data);
 }
 
 Item* Item::CreateItem(uint32 item, uint32 count, Player const* player, bool clone, uint32 randomPropertyId)
@@ -1091,29 +1097,32 @@ Item* Item::CreateItem(uint32 item, uint32 count, Player const* player, bool clo
         return nullptr;                                        //don't create item at zero count
 
     ItemTemplate const* pProto = sObjectMgr->GetItemTemplate(item);
-    if (pProto)
-    {
-        if (count > pProto->GetMaxStackSize())
-            count = pProto->GetMaxStackSize();
-
-        ASSERT_NODEBUGINFO(count != 0 && "pProto->Stackable == 0 but checked at loading already");
-
-        Item* pItem = NewItemOrBag(pProto);
-        if (pItem->Create(sObjectMgr->GetGenerator<HighGuid::Item>().Generate(), item, player))
-        {
-            pItem->SetCount(count);
-            if (!clone)
-                pItem->SetItemRandomProperties(randomPropertyId ? randomPropertyId : Item::GenerateItemRandomPropertyId(item));
-            else if (randomPropertyId)
-                pItem->SetItemRandomProperties(randomPropertyId);
-            return pItem;
-        }
-        else
-            delete pItem;
-    }
-    else
+    if (!pProto)
         ABORT();
-    return nullptr;
+
+    if (count > pProto->GetMaxStackSize())
+        count = pProto->GetMaxStackSize();
+
+    ASSERT_NODEBUGINFO(count != 0 && "pProto->Stackable == 0 but checked at loading already");
+
+    uint16 realmId = DEFAULT_NON_CROSSREALM_REALM_ID;
+    if (sToCloud9Sidecar->IsCrossrealm() && player)
+        realmId = player->GetGUID().GetRealmID();
+
+    Item* pItem = NewItemOrBag(pProto);
+    if (!pItem->Create(sObjectMgr->GetGenerator<HighGuid::Item>().Generate(realmId), item, player))
+    {
+        delete pItem;
+        return nullptr;
+    }
+
+    pItem->SetCount(count);
+    if (!clone)
+        pItem->SetItemRandomProperties(randomPropertyId ? randomPropertyId : Item::GenerateItemRandomPropertyId(item));
+    else if (randomPropertyId)
+        pItem->SetItemRandomProperties(randomPropertyId);
+
+    return pItem;
 }
 
 Item* Item::CloneItem(uint32 count, Player const* player) const
@@ -1151,7 +1160,7 @@ bool Item::IsBindedNotWith(Player const* player) const
     return true;
 }
 
-void Item::BuildUpdate(UpdateDataMapType& data_map, UpdatePlayerSet&)
+void Item::BuildUpdate(UpdateDataMapType& data_map)
 {
     if (Player* owner = GetOwner())
         BuildFieldsUpdate(owner, data_map);
@@ -1277,10 +1286,13 @@ void Item::ClearSoulboundTradeable(Player* currentOwner)
 
 bool Item::CheckSoulboundTradeExpire()
 {
-    // called from owner's update - GetOwner() MUST be valid
-    if (GetUInt32Value(ITEM_FIELD_CREATE_PLAYED_TIME) + 2 * HOUR < GetOwner()->GetTotalPlayedTime())
+    Player* owner = GetOwner();
+    if (!owner)
+        return false; // retry later
+
+    if (GetUInt32Value(ITEM_FIELD_CREATE_PLAYED_TIME) + 2 * HOUR < owner->GetTotalPlayedTime())
     {
-        ClearSoulboundTradeable(GetOwner());
+        ClearSoulboundTradeable(owner);
         return true; // remove from tradeable list
     }
 

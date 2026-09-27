@@ -1,25 +1,29 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "GameObjectScript.h"
 #include "InstanceMapScript.h"
 #include "InstanceScript.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "stratholme.h"
+
+#include <array>
+#include <list>
 
 const Position BlackGuardPos[10] =
 {
@@ -53,12 +57,15 @@ Position const MindlessUndeadPos = { 3941.75f, -3393.06f, 119.70f, 0.0f };
 Position const BarthilasPos = { 4068.74f, -3535.97f, 122.825f, 2.478367567062377929f };
 Position const SlaughterPos = { 4032.20f, -3378.06f, 119.75f, 4.67f };
 
+static constexpr uint8 ScarletThreadSpawnCount = 4;
+static constexpr uint8 AllScarletThreadLocations = (1 << ScarletThreadSpawnCount) - 1;
+
 // uint32 m_uiGateTrapTimers[2][3] = { {0,0,0}, {0,0,0} };
 
 class instance_stratholme : public InstanceMapScript
 {
 public:
-    instance_stratholme() : InstanceMapScript("instance_stratholme", 329) { }
+    instance_stratholme() : InstanceMapScript("instance_stratholme", MAP_STRATHOLME) { }
 
     struct instance_stratholme_InstanceMapScript : public InstanceScript
     {
@@ -78,6 +85,10 @@ public:
             _slaughterNPCs = 0;
             _postboxesOpened = 0;
 
+            _scarletThreadUsedLocations = 0;
+            _scarletThreadLocation = 0;
+            _scarletThreadGUID.Clear();
+
             _gateTrapsCooldown[0] = false;
             _gateTrapsCooldown[1] = false;
 
@@ -89,8 +100,8 @@ public:
             if (_baronRunTime > 0)
                 if (Aura* aura = player->AddAura(SPELL_BARON_ULTIMATUM, player))
                     aura->SetDuration(_baronRunTime * MINUTE * IN_MILLISECONDS);
-            if (_barthilasrunProgress == DONE)
-                instance->LoadGrid(3663.229980f, -3619.139893f);
+
+            SpawnScarletThread();
         }
 
         void OnCreatureCreate(Creature* creature) override
@@ -137,14 +148,14 @@ public:
             if (_slaughterProgress == 2)
             {
                 for (uint32 i = 0; i < 33; ++i)
-                    events.ScheduleEvent(EVENT_SPAWN_MINDLESS, 5000 + i * 210);
+                    events.ScheduleEvent(EVENT_SPAWN_MINDLESS, Milliseconds(5000 + i * 210));
                 if (Creature* baron = instance->GetCreature(_baronRivendareGUID))
                     if (GameObject* gate = baron->FindNearestGameObject(GO_SLAUGHTER_GATE_SIDE, 200.0f))
                         gate->SetGoState(GO_STATE_ACTIVE);
             }
             if (_slaughterProgress == 3)
             {
-                events.ScheduleEvent(EVENT_SPAWN_BLACK_GUARD, 20000);
+                events.ScheduleEvent(EVENT_SPAWN_BLACK_GUARD, 20s);
             }
             if (_slaughterProgress == 4)
             {
@@ -261,7 +272,6 @@ public:
         {
             if (_zigguratState1 == 2 && _zigguratState2 == 2 && _zigguratState3 == 2)
             {
-                instance->LoadGrid(4035.83f, -3336.31f);
                 if (Creature* baron = instance->GetCreature(_baronRivendareGUID))
                     baron->AI()->Talk(SAY_BRAON_ZIGGURAT_FALL_YELL);
 
@@ -299,9 +309,8 @@ public:
                         _baronRunProgress = DATA_BARON_RUN_GATE;
                         _baronRunTime = 45;
                         DoCastSpellOnPlayers(SPELL_BARON_ULTIMATUM);
-                        events.ScheduleEvent(EVENT_BARON_TIME, 60000);
+                        events.ScheduleEvent(EVENT_BARON_TIME, 60s);
 
-                        instance->LoadGrid(4035.83f, -3336.31f);
                         if (Creature* baron = instance->GetCreature(_baronRivendareGUID))
                             baron->AI()->Talk(SAY_BARON_INIT_YELL);
                     }
@@ -371,6 +380,17 @@ public:
             SaveToDB();
         }
 
+        void SetGuidData(uint32 type, ObjectGuid data) override
+        {
+            if (type != DATA_SCARLET_THREAD_LOOTED || data != _scarletThreadGUID)
+                return;
+
+            _scarletThreadUsedLocations |= 1 << _scarletThreadLocation;
+            _scarletThreadGUID.Clear();
+            SpawnScarletThread();
+            SaveToDB();
+        }
+
         void ReadSaveDataMore(std::istringstream& data) override
         {
             data >> _baronRunProgress;
@@ -381,14 +401,19 @@ public:
             data >> _slaughterProgress;
             data >> _postboxesOpened;
             data >> _barthilasrunProgress;
+
+            uint32 scarletThreadUsedLocations;
+            if (data >> scarletThreadUsedLocations && scarletThreadUsedLocations <= AllScarletThreadLocations)
+                _scarletThreadUsedLocations = scarletThreadUsedLocations;
+
             if (_baronRunTime)
             {
-                events.ScheduleEvent(EVENT_BARON_TIME, 60000);
+                events.ScheduleEvent(EVENT_BARON_TIME, 60s);
             }
 
             if (_slaughterProgress > 0 && _slaughterProgress < 4)
             {
-                events.ScheduleEvent(EVENT_FORCE_SLAUGHTER_EVENT, 5000);
+                events.ScheduleEvent(EVENT_FORCE_SLAUGHTER_EVENT, 5s);
             }
         }
 
@@ -401,7 +426,8 @@ public:
                 << _zigguratState3 << ' '
                 << _slaughterProgress << ' '
                 << _postboxesOpened << ' '
-                << _barthilasrunProgress;
+                << _barthilasrunProgress << ' '
+                << uint32(_scarletThreadUsedLocations);
         }
 
         uint32 GetData(uint32 type) const override
@@ -459,20 +485,20 @@ public:
                             if (i == 0)
                             {
                                 // set timer to reset the trap
-                                events.ScheduleEvent(EVENT_GATE1_TRAP, 30 * MINUTE * IN_MILLISECONDS);
+                                events.ScheduleEvent(EVENT_GATE1_TRAP, 1800s);
                                 // set timer to reopen gates
-                                events.ScheduleEvent(EVENT_GATE1_DELAY, 20 * IN_MILLISECONDS);
+                                events.ScheduleEvent(EVENT_GATE1_DELAY, 20s);
                                 // set timer to spawn the plagued critters
-                                events.ScheduleEvent(EVENT_GATE1_CRITTER_DELAY, 2 * IN_MILLISECONDS);
+                                events.ScheduleEvent(EVENT_GATE1_CRITTER_DELAY, 2s);
                             }
                             else if (i == 1)
                             {
                                 // set timer to reset the trap
-                                events.ScheduleEvent(EVENT_GATE2_TRAP, 30 * MINUTE * IN_MILLISECONDS);
+                                events.ScheduleEvent(EVENT_GATE2_TRAP, 1800s);
                                 // set timer to reopen gates
-                                events.ScheduleEvent(EVENT_GATE2_DELAY, 20 * IN_MILLISECONDS);
+                                events.ScheduleEvent(EVENT_GATE2_DELAY, 20s);
                                 // set timer to spawn the plagued critters
-                                events.ScheduleEvent(EVENT_GATE2_CRITTER_DELAY, 2 * IN_MILLISECONDS);
+                                events.ScheduleEvent(EVENT_GATE2_CRITTER_DELAY, 2s);
                             }
                         }
                     }
@@ -505,7 +531,6 @@ public:
                 case EVENT_BARON_TIME:
                 {
                     --_baronRunTime;
-                    instance->LoadGrid(4035.83f, -3336.31f);
                     Creature* baron = instance->GetCreature(_baronRivendareGUID);
                     if (baron && !baron->IsInCombat())
                     {
@@ -536,7 +561,6 @@ public:
                 }
                 case EVENT_EXECUTE_PRISONER:
                 {
-                    instance->LoadGrid(4035.83f, -3336.31f);
                     Creature* baron = instance->GetCreature(_baronRivendareGUID);
                     if (baron && baron->IsAlive())
                     {
@@ -618,6 +642,35 @@ public:
         ObjectGuid _trappedPlayerGUID;
         ObjectGuid _trapGatesGUIDs[4];
 
+        uint8 _scarletThreadUsedLocations;
+        uint8 _scarletThreadLocation;
+        ObjectGuid _scarletThreadGUID;
+
+        void SpawnScarletThread()
+        {
+            if (_scarletThreadGUID || _scarletThreadUsedLocations == AllScarletThreadLocations)
+                return;
+
+            std::array<uint8, ScarletThreadSpawnCount> availableLocations{};
+            uint8 availableLocationCount = 0;
+            for (uint8 location = 0; location < ScarletThreadSpawnCount; ++location)
+                if (!(_scarletThreadUsedLocations & (1 << location)))
+                    availableLocations[availableLocationCount++] = location;
+
+            if (!availableLocationCount)
+                return;
+
+            _scarletThreadLocation = availableLocations[urand(0, availableLocationCount - 1)];
+
+            std::list<GameObject*> threads;
+            instance->SummonGameObjectGroup(_scarletThreadLocation, &threads);
+            if (threads.empty())
+                return;
+
+            _scarletThreadGUID = threads.front()->GetGUID();
+            threads.front()->setActive(true);
+        }
+
         void gate_delay(int gate)
         {
             if (_trapGatesGUIDs[2 * gate])
@@ -648,7 +701,33 @@ public:
     }
 };
 
+class go_enchanted_scarlet_thread : public GameObjectScript
+{
+public:
+    go_enchanted_scarlet_thread() : GameObjectScript("go_enchanted_scarlet_thread") { }
+
+    void OnLootStateChanged(GameObject* go, uint32 state, Unit* /*unit*/) override
+    {
+        if (state != GO_JUST_DEACTIVATED)
+            return;
+
+        for (LootItem const& item : go->loot.quest_items)
+        {
+            if (item.itemid != ITEM_ENCHANTED_SCARLET_THREAD || !item.is_looted)
+                continue;
+
+            if (InstanceScript* instance = go->GetInstanceScript())
+                instance->SetGuidData(DATA_SCARLET_THREAD_LOOTED, go->GetGUID());
+
+            return;
+        }
+
+        go->SetLootState(GO_READY);
+    }
+};
+
 void AddSC_instance_stratholme()
 {
     new instance_stratholme();
+    new go_enchanted_scarlet_thread();
 }

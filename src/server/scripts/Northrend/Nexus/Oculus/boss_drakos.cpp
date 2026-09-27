@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,8 +22,7 @@
 enum Spells
 {
     SPELL_MAGIC_PULL                    = 51336,
-    SPELL_THUNDERING_STOMP_N            = 50774,
-    SPELL_THUNDERING_STOMP_H            = 59370,
+    SPELL_THUNDERING_STOMP              = 50774,
 
     SPELL_UNSTABLE_SPHERE_PASSIVE       = 50756,
     SPELL_UNSTABLE_SPHERE_PULSE         = 50757,
@@ -43,8 +42,6 @@ enum Events
     EVENT_SUMMON                        = 3,
     EVENT_SUMMON_x4                     = 4,
 };
-
-#define SPELL_THUNDERING_STOMP          DUNGEON_MODE(SPELL_THUNDERING_STOMP_N, SPELL_THUNDERING_STOMP_H)
 
 enum Yells
 {
@@ -105,9 +102,9 @@ public:
             {
                 pInstance->SetData(DATA_DRAKOS, DONE);
                 for( uint8 i = 0; i < 3; ++i )
-                    if( ObjectGuid guid = pInstance->GetGuidData(DATA_DCD_1 + i) )
-                        if( GameObject* pGo = ObjectAccessor::GetGameObject(*me, guid) )
-                            if( pGo->GetGoState() != GO_STATE_ACTIVE )
+                    if (ObjectGuid guid = pInstance->GetGuidData(DATA_DCD_1 + i))
+                        if (GameObject* pGo = ObjectAccessor::GetGameObject(*me, guid))
+                            if (pGo->GetGoState() != GO_STATE_ACTIVE )
                             {
                                 pGo->SetLootState(GO_READY);
                                 pGo->UseDoorOrButton(0, false);
@@ -125,17 +122,17 @@ public:
 
         void UpdateAI(uint32 diff) override
         {
-            if( !UpdateVictim() )
+            if (!UpdateVictim())
                 return;
 
             events.Update(diff);
 
-            if( me->HasUnitState(UNIT_STATE_CASTING) )
+            if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
 
             DoMeleeAttackIfReady();
 
-            switch( events.ExecuteEvent() )
+            switch (events.ExecuteEvent())
             {
                 case 0:
                     break;
@@ -206,10 +203,10 @@ public:
 
         void MovementInform(uint32 type, uint32 id) override
         {
-            if( type != POINT_MOTION_TYPE || id != 1 )
+            if (type != POINT_MOTION_TYPE || id != 1)
                 return;
 
-            if( !located )
+            if (!located)
                 gonext = true;
         }
 
@@ -231,21 +228,21 @@ public:
 
         void UpdateAI(uint32 diff) override
         {
-            if( timer == 0 )
+            if (timer == 0)
                 me->CastSpell(me, SPELL_TELEPORT_VISUAL, true);
 
             timer += diff;
 
-            if( timer > 10000 )
+            if (timer > 10000)
             {
-                if( !located )
+                if (!located)
                     me->GetMotionMaster()->MoveIdle();
                 located = true;
                 me->CastSpell(me, SPELL_UNSTABLE_SPHERE_PULSE, true);
                 timer -= 2000;
             }
 
-            if( !located && gonext )
+            if (!located && gonext)
             {
                 PickNewLocation();
                 gonext = false;

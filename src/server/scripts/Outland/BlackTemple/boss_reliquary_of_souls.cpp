@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -107,7 +107,7 @@ public:
             {
                 summoner->GetAI()->DoAction(_action);
                 _owner.SetStandState(UNIT_STAND_STATE_SUBMERGED);
-                _owner.DespawnOrUnsummon(200);
+                _owner.DespawnOrUnsummon(200ms);
             }
         return true;
     }
@@ -141,13 +141,15 @@ public:
 
         void MoveInLineOfSight(Unit* who) override
         {
-            if (!who || me->getStandState() != UNIT_STAND_STATE_SLEEP || !who->IsPlayer() || me->GetDistance2d(who) > 90.0f || who->ToPlayer()->IsGameMaster())
+            if (!who || me->getStandState() != UNIT_STAND_STATE_SLEEP || !who->IsPlayer() ||
+                who->ToPlayer()->IsGameMaster() || me->GetDistance2d(who) > 90.0f ||
+                !me->isInFront(who, M_PI / 4.0f) || !me->IsWithinLOSInMap(who))
                 return;
 
             me->SetInCombatWithZone();
             me->SetStandState(UNIT_STAND_STATE_STAND);
 
-            ScheduleUniqueTimedEvent(5s, [&] { // 15s
+            ScheduleUniqueTimedEvent(5s, [&] {
                 me->SetStandState(UNIT_STAND_STATE_SUBMERGED);
                 DoCastSelf(SPELL_SUMMON_ESSENCE_OF_SUFFERING);
             }, EVENT_ESSENCE_OF_SUFFERING);
@@ -261,11 +263,10 @@ public:
 
     struct boss_essence_of_sufferingAI : public ScriptedAI
     {
-        boss_essence_of_sufferingAI(Creature* creature) : ScriptedAI(creature), _recentlySpoken(false) { }
+        boss_essence_of_sufferingAI(Creature* creature) : ScriptedAI(creature) { }
 
         void Reset() override
         {
-            _recentlySpoken = false;
             scheduler.CancelAll();
         }
 
@@ -284,7 +285,7 @@ public:
             if (type != POINT_MOTION_TYPE || id != POINT_GO_BACK)
                 return;
 
-            me->m_Events.AddEvent(new SuckBackEvent(*me, ACTION_ESSENCE_OF_SUFFERING), me->m_Events.CalculateTime(1500));
+            me->m_Events.AddEventAtOffset(new SuckBackEvent(*me, ACTION_ESSENCE_OF_SUFFERING), 1500ms);
             me->SetTarget();
             me->SetFacingTo(M_PI / 2.0f);
         }
@@ -301,7 +302,7 @@ public:
                     Talk(SUFF_SAY_RECAP);
                     me->SetReactState(REACT_PASSIVE);
                     me->GetMotionMaster()->Clear();
-                    me->GetMotionMaster()->MovePoint(POINT_GO_BACK, me->GetHomePosition(), false);
+                    me->GetMotionMaster()->MovePoint(POINT_GO_BACK, me->GetHomePosition(), FORCED_MOVEMENT_NONE, 0.f, false);
                     scheduler.CancelAll();
                 }
             }
@@ -309,13 +310,7 @@ public:
 
         void KilledUnit(Unit* /*victim*/) override
         {
-            if (!_recentlySpoken)
-            {
-                Talk(SUFF_SAY_SLAY);
-                me->m_Events.AddEventAtOffset([&] {
-                    _recentlySpoken = false;
-                }, 6s);
-            }
+            Talk(SUFF_SAY_SLAY);
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -352,8 +347,6 @@ public:
             DoMeleeAttackIfReady();
         }
 
-    private:
-        bool _recentlySpoken;
     };
 };
 
@@ -369,11 +362,10 @@ public:
 
     struct boss_essence_of_desireAI : public ScriptedAI
     {
-        boss_essence_of_desireAI(Creature* creature) : ScriptedAI(creature), _recentlySpoken(false) { }
+        boss_essence_of_desireAI(Creature* creature) : ScriptedAI(creature) { }
 
         void Reset() override
         {
-            _recentlySpoken = false;
             scheduler.CancelAll();
         }
 
@@ -392,7 +384,7 @@ public:
             if (type != POINT_MOTION_TYPE || id != POINT_GO_BACK)
                 return;
 
-            me->m_Events.AddEvent(new SuckBackEvent(*me, ACTION_ESSENCE_OF_DESIRE), me->m_Events.CalculateTime(1500));
+            me->m_Events.AddEventAtOffset(new SuckBackEvent(*me, ACTION_ESSENCE_OF_DESIRE), 1500ms);
             me->SetTarget();
             me->SetFacingTo(M_PI / 2.0f);
         }
@@ -408,7 +400,7 @@ public:
                     Talk(DESI_SAY_RECAP);
                     me->SetReactState(REACT_PASSIVE);
                     me->GetMotionMaster()->Clear();
-                    me->GetMotionMaster()->MovePoint(POINT_GO_BACK, me->GetHomePosition(), false);
+                    me->GetMotionMaster()->MovePoint(POINT_GO_BACK, me->GetHomePosition(), FORCED_MOVEMENT_NONE, 0.f, false);
                     scheduler.CancelAll();
                 }
             }
@@ -416,13 +408,7 @@ public:
 
         void KilledUnit(Unit* /*victim*/) override
         {
-            if (!_recentlySpoken)
-            {
-                Talk(DESI_SAY_SLAY);
-                me->m_Events.AddEventAtOffset([&] {
-                    _recentlySpoken = false;
-                }, 6s);
-            }
+            Talk(DESI_SAY_SLAY);
         }
 
         void JustEngagedWith(Unit* /*who*/) override
@@ -465,8 +451,6 @@ public:
             DoMeleeAttackIfReady();
         }
 
-    private:
-        bool _recentlySpoken;
     };
 };
 
@@ -482,13 +466,12 @@ public:
 
     struct boss_essence_of_angerAI : public ScriptedAI
     {
-        boss_essence_of_angerAI(Creature* creature) : ScriptedAI(creature), _recentlySpoken(false) { }
+        boss_essence_of_angerAI(Creature* creature) : ScriptedAI(creature) { }
 
         ObjectGuid targetGUID;
 
         void Reset() override
         {
-            _recentlySpoken = false;
             targetGUID.Clear();
             scheduler.CancelAll();
         }
@@ -505,13 +488,7 @@ public:
 
         void KilledUnit(Unit* /*victim*/) override
         {
-            if (!_recentlySpoken)
-            {
-                Talk(ANGER_SAY_SLAY);
-                me->m_Events.AddEventAtOffset([&] {
-                    _recentlySpoken = false;
-                }, 6s);
-            }
+            Talk(ANGER_SAY_SLAY);
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -561,8 +538,6 @@ public:
             DoMeleeAttackIfReady();
         }
 
-    private:
-        bool _recentlySpoken;
     };
 };
 

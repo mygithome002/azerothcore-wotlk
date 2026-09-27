@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,6 +23,9 @@
 #include "PathCommon.h"
 #include "VMapMgr2.h"
 #include <vector>
+#include <map>
+
+#include "StringFormat.h"
 
 // ******************************************
 // Map file format defines
@@ -79,10 +82,17 @@ struct map_liquidHeader
 
 namespace MMAP
 {
+    static char const* const MAP_FILE_NAME_FORMAT  = "{}/{:03}{:02}{:02}.map";
 
     uint32 const MAP_VERSION_MAGIC = 9;
 
-    TerrainBuilder::TerrainBuilder(bool skipLiquid) : m_skipLiquid (skipLiquid) { }
+    TerrainBuilder::TerrainBuilder(std::string const& dataDirPath, bool skipLiquid) :
+                m_skipLiquid (skipLiquid),
+                m_mapsPath((std::filesystem::path(dataDirPath) / "maps").string()),
+                m_vmapsPath((std::filesystem::path(dataDirPath) / "vmaps").string())
+    {
+    }
+
     TerrainBuilder::~TerrainBuilder() = default;
 
     /**************************************************************************/
@@ -133,10 +143,13 @@ namespace MMAP
     /**************************************************************************/
     bool TerrainBuilder::loadMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData, Spot portion)
     {
-        char mapFileName[255];
-        sprintf(mapFileName, "maps/%03u%02u%02u.map", mapID, tileY, tileX);
+        const std::string mapFileName = Acore::StringFormat(
+            MAP_FILE_NAME_FORMAT,
+            m_mapsPath,
+            mapID, tileY, tileX
+        );
 
-        FILE* mapFile = fopen(mapFileName, "rb");
+        FILE* mapFile = fopen(mapFileName.c_str(), "rb");
         if (!mapFile)
             return false;
 
@@ -145,7 +158,7 @@ namespace MMAP
                 fheader.versionMagic != MAP_VERSION_MAGIC)
         {
             fclose(mapFile);
-            printf("%s is the wrong version, please extract new .map files\n", mapFileName);
+            printf("%s is the wrong version, please extract new .map files\n", mapFileName.c_str());
             return false;
         }
 
@@ -663,24 +676,20 @@ namespace MMAP
     /**************************************************************************/
     bool TerrainBuilder::loadVMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData)
     {
-        IVMapMgr* vmapMgr = new VMapMgr2();
-        int result = vmapMgr->loadMap("vmaps", mapID, tileX, tileY);
+        std::string const mapFileName = VMapMgr2::getMapFileName(mapID);
+        std::unique_ptr<StaticMapTree> staticTree = std::make_unique<StaticMapTree>(mapID, m_vmapsPath);
+        if (!staticTree->InitMap(mapFileName))
+            return false;
+
+        staticTree->LoadMapTile(tileX, tileY);
+
         bool retval = false;
 
         do
         {
-            if (result == VMAP_LOAD_RESULT_ERROR)
-                break;
-
-            InstanceTreeMap instanceTrees;
-            ((VMapMgr2*)vmapMgr)->GetInstanceMapTree(instanceTrees);
-
-            if (!instanceTrees[mapID])
-                break;
-
             ModelInstance* models = nullptr;
             uint32 count = 0;
-            instanceTrees[mapID]->GetModelInstances(models, count);
+            staticTree->GetModelInstances(models, count);
 
             if (!models)
                 break;
@@ -816,9 +825,6 @@ namespace MMAP
             }
         } while (false);
 
-        vmapMgr->unloadMap(mapID, tileX, tileY);
-        delete vmapMgr;
-
         return retval;
     }
 
@@ -921,30 +927,29 @@ namespace MMAP
     }
 
     /**************************************************************************/
-    void TerrainBuilder::loadOffMeshConnections(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData, const char* offMeshFilePath)
+    void TerrainBuilder::loadOffMeshConnections(uint32 mapID, uint32 tileX, uint32 tileY,
+                                                MeshData& meshData,
+                                                std::vector<std::string> const& offMeshLines)
     {
-        // no meshfile input given?
-        if (!offMeshFilePath)
+        if (offMeshLines.empty())
             return;
 
-        FILE* fp = fopen(offMeshFilePath, "rb");
-        if (!fp)
-        {
-            printf(" loadOffMeshConnections:: input file %s not found!\n", offMeshFilePath);
-            return;
-        }
-
-        // pretty silly thing, as we parse entire file and load only the tile we need
-        // but we don't expect this file to be too large
-        char* buf = new char[512];
-        while (fgets(buf, 512, fp))
+        for (std::string const& line : offMeshLines)
         {
             float p0[3], p1[3];
             uint32 mid, tx, ty;
             float size;
-            if (sscanf(buf, "%u %u,%u (%f %f %f) (%f %f %f) %f", &mid, &tx, &ty,
-                       &p0[0], &p0[1], &p0[2], &p1[0], &p1[1], &p1[2], &size) != 10)
+
+            if (sscanf(line.c_str(),
+                       "%u %u,%u (%f %f %f) (%f %f %f) %f",
+                       &mid, &tx, &ty,
+                       &p0[0], &p0[1], &p0[2],
+                       &p1[0], &p1[1], &p1[2],
+                       &size) != 10)
+            {
+                printf("Skipped off-mesh connection '%s': invalid format\n", line.c_str());
                 continue;
+            }
 
             if (mapID == mid && tileX == tx && tileY == ty)
             {
@@ -956,15 +961,11 @@ namespace MMAP
                 meshData.offMeshConnections.append(p1[2]);
                 meshData.offMeshConnections.append(p1[0]);
 
-                meshData.offMeshConnectionDirs.append(1);          // 1 - both direction, 0 - one sided
-                meshData.offMeshConnectionRads.append(size);       // agent size equivalent
-                // can be used same way as polygon flags
+                meshData.offMeshConnectionDirs.append(1);      // 1 - both direction, 0 - one sided
+                meshData.offMeshConnectionRads.append(size);   // agent radius equivalent
                 meshData.offMeshConnectionsAreas.append((unsigned char)0xFF);
-                meshData.offMeshConnectionsFlags.append((unsigned short)0xFF);  // all movement masks can make this path
+                meshData.offMeshConnectionsFlags.append((unsigned short)0xFF);
             }
         }
-
-        delete [] buf;
-        fclose(fp);
     }
 }

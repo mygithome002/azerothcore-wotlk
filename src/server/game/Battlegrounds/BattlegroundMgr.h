@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -20,10 +20,8 @@
 
 #include "Battleground.h"
 #include "BattlegroundQueue.h"
-#include "Common.h"
 #include "CreatureAIImpl.h"
 #include "DBCEnums.h"
-#include <functional>
 #include <unordered_map>
 
 typedef std::map<uint32, Battleground*> BattlegroundContainer;
@@ -84,6 +82,7 @@ public:
     Battleground* GetBattleground(uint32 instanceID, BattlegroundTypeId bgTypeId);
     Battleground* GetBattlegroundTemplate(BattlegroundTypeId bgTypeId);
     Battleground* CreateNewBattleground(BattlegroundTypeId bgTypeId, PvPDifficultyEntry const* bracketEntry, uint8 arenaType, bool isRated);
+    std::vector<Battleground const*> GetActiveBattlegrounds();
 
     void AddBattleground(Battleground* bg);
     void RemoveBattleground(BattlegroundTypeId bgTypeId, uint32 instanceId);
@@ -94,7 +93,10 @@ public:
     void LoadBattlegroundTemplates();
     void DeleteAllBattlegrounds();
 
-    void SendToBattleground(Player* player, uint32 InstanceID, BattlegroundTypeId bgTypeId);
+    // Returns false when the teleport could not start (instance gone, or a
+    // synchronous TeleportTo failure) so the accept path can release the
+    // otherwise-orphaned invited reservation.
+    bool SendToBattleground(Player* player, uint32 InstanceID, BattlegroundTypeId bgTypeId);
 
     /* Battleground queues */
     BattlegroundQueue& GetBattlegroundQueue(BattlegroundQueueTypeId bgQueueTypeId) { return m_BattlegroundQueues[bgQueueTypeId]; }

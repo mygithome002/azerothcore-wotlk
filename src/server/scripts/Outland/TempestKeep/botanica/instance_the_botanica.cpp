@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -26,7 +26,7 @@
 class instance_the_botanica : public InstanceMapScript
 {
 public:
-    instance_the_botanica() : InstanceMapScript("instance_the_botanica", 553) { }
+    instance_the_botanica() : InstanceMapScript("instance_the_botanica", MAP_TEMPEST_KEEP_THE_BOTANICA) { }
 
     struct instance_the_botanica_InstanceMapScript : public InstanceScript
     {
@@ -59,8 +59,9 @@ class spell_botanica_call_of_the_falcon_aura : public AuraScript
         GetUnitOwner()->GetCreaturesWithEntryInRange(creatureList, 80.0f, NPC_BLOODFALCON);
         for (std::list<Creature*>::const_iterator itr = creatureList.begin(); itr != creatureList.end(); ++itr)
         {
-            (*itr)->TauntApply(GetUnitOwner());
             (*itr)->AddThreat(GetUnitOwner(), 10000000.0f);
+            if ((*itr)->AI())
+                (*itr)->AI()->AttackStart(GetUnitOwner());
             _falconSet.insert((*itr)->GetGUID());
         }
     }
@@ -70,7 +71,6 @@ class spell_botanica_call_of_the_falcon_aura : public AuraScript
         for (ObjectGuid const& guid : _falconSet)
             if (Creature* falcon = ObjectAccessor::GetCreature(*GetUnitOwner(), guid))
             {
-                falcon->TauntFadeOut(GetUnitOwner());
                 falcon->AddThreat(GetUnitOwner(), -10000000.0f);
             }
     }
@@ -127,9 +127,19 @@ class spell_botanica_shift_form_aura : public AuraScript
             {
                 _swapTime = GameTime::GetGameTime().count() + 6;
                 _lastSchool = spellInfo->GetSchoolMask();
-                GetUnitOwner()->RemoveAurasDueToSpell(_lastForm);
+
+                // Runs from Aura::GetProcEffectMask while the proc engine iterates the owner's
+                // applied-aura map. Swapping forms mutates that map (RemoveAura + CastSpell),
+                // which invalidates the live iterator now that aura containers are flat_multimaps.
+                // Defer the swap to the owner's event queue so it runs outside the proc walk.
+                Unit* owner = GetUnitOwner();
+                uint32 const oldForm = _lastForm;
                 _lastForm = form;
-                GetUnitOwner()->CastSpell(GetUnitOwner(), _lastForm, true);
+                owner->m_Events.AddEventAtOffset([owner, oldForm, form]()
+                {
+                    owner->RemoveAurasDueToSpell(oldForm);
+                    owner->CastSpell(owner, form, true);
+                }, 1ms);
             }
         }
 

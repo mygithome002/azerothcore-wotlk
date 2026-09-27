@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -33,7 +33,7 @@ struct CharacterCacheEntry
     uint8 Race;
     uint8 Sex;
     uint8 Level;
-    uint8 MailCount;
+    uint16 MailCount;
     ObjectGuid::LowType GuildId;
     std::array<uint32, MAX_ARENA_SLOT> ArenaTeamId;
     ObjectGuid GroupGuid;
@@ -58,10 +58,6 @@ class AC_GAME_API CharacterCache
         void UpdateCharacterGuildId(ObjectGuid const& guid, ObjectGuid::LowType guildId);
         void UpdateCharacterArenaTeamId(ObjectGuid const& guid, uint8 slot, uint32 arenaTeamId);
 
-        void UpdateCharacterMailCount(ObjectGuid const& guid, int8 count, bool update = false);
-        void DecreaseCharacterMailCount(ObjectGuid const& guid) { UpdateCharacterMailCount(guid, -1); };
-        void IncreaseCharacterMailCount(ObjectGuid const& guid) { UpdateCharacterMailCount(guid, 1); };
-
         [[nodiscard]] bool HasCharacterCacheEntry(ObjectGuid const& guid) const;
         [[nodiscard]] CharacterCacheEntry const* GetCharacterCacheByGuid(ObjectGuid const& guid) const;
         [[nodiscard]] CharacterCacheEntry const* GetCharacterCacheByName(std::string const& name) const;
@@ -78,6 +74,15 @@ class AC_GAME_API CharacterCache
         [[nodiscard]] ObjectGuid::LowType GetCharacterGuildIdByGuid(ObjectGuid guid) const;
         [[nodiscard]] uint32 GetCharacterArenaTeamIdByGuid(ObjectGuid guid, uint8 type) const;
         [[nodiscard]] ObjectGuid GetCharacterGroupGuidByGuid(ObjectGuid guid) const;
+
+    private:
+        // Only MailMgr may touch the mail count, so every change is paired
+        // with the matching write to the `mail` table
+        void UpdateCharacterMailCount(ObjectGuid const& guid, int32 count, bool update = false);
+        void DecreaseCharacterMailCount(ObjectGuid const& guid) { UpdateCharacterMailCount(guid, -1); }
+        void IncreaseCharacterMailCount(ObjectGuid const& guid) { UpdateCharacterMailCount(guid, 1); }
+
+        friend class MailMgr;
 };
 
 #define sCharacterCache CharacterCache::instance()

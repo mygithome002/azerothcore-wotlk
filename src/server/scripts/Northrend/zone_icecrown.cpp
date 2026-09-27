@@ -1,20 +1,21 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "AreaDefines.h"
 #include "CombatAI.h"
 #include "CreatureScript.h"
 #include "MoveSplineInit.h"
@@ -29,7 +30,6 @@
 #include "SpellScriptLoader.h"
 #include "Vehicle.h"
 
-// Ours
 enum eBKG
 {
     QUEST_BLACK_KNIGHT_CURSE            = 14016,
@@ -81,6 +81,7 @@ enum valhalas
     EVENT_VALHALAS_SECOND                       = 2,
     EVENT_VALHALAS_THIRD                        = 3,
     EVENT_VALHALAS_CHECK_PLAYER                 = 4,
+    EVENT_VALHALAS_THIRD_2                      = 5,
 
     // Fallen Heroes
     NPC_ELDRETH                                 = 31195,
@@ -95,6 +96,39 @@ enum valhalas
     NPC_CARNAGE                                 = 31271,
     NPC_THANE                                   = 31277,
     NPC_PRINCE                                  = 14688, // no mistake
+
+    SAY_FALLEN_HEROES_ACCEPT                    = 0,
+    SAY_FALLEN_HEROES_CHALLENGERS               = 1,
+    SAY_FALLEN_HEROES_STAKES                    = 2,
+    EMOTE_FALLEN_HEROES_ARRIVE                  = 3,
+    SAY_FALLEN_HEROES_VICTORY                   = 4,
+
+    SAY_DARK_MASTER_ACCEPT                      = 5,
+    SAY_DARK_MASTER_CHALLENGERS                 = 6,
+    EMOTE_DARK_MASTER_ARRIVE                    = 7,
+    SAY_DARK_MASTER_VICTORY                     = 8,
+
+    SAY_SIGRID_ACCEPT                           = 9,
+    EMOTE_SIGRID_ARRIVE                         = 10,
+    SAY_SIGRID_VICTORY                          = 11,
+
+    SAY_CARNAGE_ACCEPT                          = 12,
+    SAY_CARNAGE_CHALLENGERS                     = 13,
+    EMOTE_CARNAGE_ARRIVE                        = 14,
+    SAY_CARNAGE_VICTORY                         = 15,
+
+    SAY_THANE_ACCEPT                            = 16,
+    SAY_THANE_CHALLENGERS                       = 17,
+    EMOTE_THANE_ARRIVE                          = 18,
+    SAY_THANE_VICTORY                           = 19,
+
+    SAY_FINAL_ACCEPT                            = 20,
+    SAY_FINAL_CHALLENGERS                       = 21,
+    SAY_FINAL_OPPONENT                          = 22,
+    EMOTE_FINAL_ARRIVE                          = 23,
+    SAY_FINAL_VICTORY                           = 24,
+    SAY_FINAL_CHAMPION_1                        = 25,
+    SAY_FINAL_CHAMPION_2                        = 26,
 };
 
 class npc_battle_at_valhalas : public CreatureScript
@@ -111,12 +145,16 @@ public:
         EventMap events;
         SummonList summons;
         ObjectGuid playerGUID;
-        ObjectGuid playerGUID2;
         uint32 currentQuest;
 
         void Reset() override
         {
             ResetData();
+        }
+
+        void JustReachedHome() override
+        {
+            me->SetNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
         }
 
         void ResetData()
@@ -125,7 +163,7 @@ public:
             summons.DespawnAll();
             playerGUID.Clear();
             currentQuest = 0;
-            me->SetNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
+            me->SetNpcFlag(UNIT_NPC_FLAG_QUESTGIVER | UNIT_NPC_FLAG_GOSSIP);
         }
 
         void JustSummoned(Creature* creature) override
@@ -138,7 +176,7 @@ public:
 
         void PrepareSummons()
         {
-            switch(currentQuest)
+            switch (currentQuest)
             {
                 case QUEST_BFV_FALLEN_HEROES:
                     me->SummonCreature(NPC_ELDRETH, 8245.5f, 3522.7f, 627.67f, 3.11f, TEMPSUMMON_MANUAL_DESPAWN, 30000);
@@ -170,63 +208,16 @@ public:
         {
             events.ScheduleEvent(EVENT_VALHALAS_FIRST, 6s);
             events.ScheduleEvent(EVENT_VALHALAS_CHECK_PLAYER, 30s);
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
             currentQuest = questId;
             playerGUID = guid;
         }
 
-        void CheckSummons()
+        void EndBattle()
         {
-            bool allow = true;
-            for (ObjectGuid const& guid : summons)
-                if (Creature* cr = ObjectAccessor::GetCreature(*me, guid))
-                    if (cr->IsAlive())
-                        allow = false;
-
-            if (allow)
-            {
-                uint32 quest = currentQuest;
-                if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-                {
-                    switch (quest)
-                    {
-                        case QUEST_BFV_FALLEN_HEROES:
-                            me->Yell("$N has defeated the fallen heroes of Valhalas battles past. This is only a beginning, but it will suffice.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                            break;
-                        case QUEST_BFV_DARK_MASTER:
-                            me->Yell("Khit'rix the Dark Master has been defeated by $N and his band of companions. Let the next challenge be issued!", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                            break;
-                        case QUEST_BFV_SIGRID:
-                            me->Yell("$N has defeated Sigrid Iceborn for a second time. Well, this time he did it with the help of his friends, but a win is a win!", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                            break;
-                        case QUEST_BFV_CARNAGE:
-                            me->Yell("The horror known as Carnage is no more. Could it be that $N is truly worthy of battle in Valhalas? We shall see.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                            break;
-                        case QUEST_BFV_THANE:
-                            me->Yell("Thane Banahogg the Deathblow has fallen to $N and his fighting companions. He has but one challenge ahead of him. Who will it be?", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                            break;
-                        case QUEST_BFV_FINAL:
-                            me->Yell("The unthinkable has happened... $N has slain Prince Sandoval!", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                            break;
-                    }
-                    player->GroupEventHappens(quest, player);
-                }
-                playerGUID2 = playerGUID;
-                EnterEvadeMode();
-                if (quest == QUEST_BFV_FINAL)
-                    events.ScheduleEvent(EVENT_VALHALAS_THIRD, 7s);
-            }
-            else
-            {
-                uint32 quest = currentQuest;
-                if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-                {
-                    if (!player->HasQuest(quest))
-                    {
-                        ResetData();
-                        return;
-                    }
-                }
-            }
+            ResetData();
+            me->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP | UNIT_NPC_FLAG_QUESTGIVER);
+            me->GetMotionMaster()->MoveTargetedHome();
         }
 
         void UpdateAI(uint32 diff) override
@@ -236,31 +227,32 @@ public:
             {
                 case EVENT_VALHALAS_FIRST:
                     {
+                        Player* player = ObjectAccessor::GetPlayer(*me, playerGUID);
                         switch (currentQuest)
                         {
                             case QUEST_BFV_FALLEN_HEROES:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("$N and comrades in arms have chosen to accept honorable combat within the sacred confines of Valhalas.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_FALLEN_HEROES_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_DARK_MASTER:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("$N has accepted the challenge of Khit'rix the Dark Master. May the gods show mercy upon him for Khit'rix surely will not.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_DARK_MASTER_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_SIGRID:
                                 PrepareSummons();
-                                me->TextEmote("Circling Valhalas, Sigrid Iceborn approaches to seek her revenge!", nullptr, true);
+                                Talk(EMOTE_SIGRID_ARRIVE);
                                 break;
                             case QUEST_BFV_CARNAGE:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("From the bowels of the Underhalls comes Carnage. Brave and foolish $N has accepted the challenge. $N and his group stand ready to face the monstrosity.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_CARNAGE_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_THANE:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("Thane Banahogg returns to Valhalas for the first time in ages to prove that the vrykul are the only beings worthy to fight within its sacred ring. Will $N prove him wrong?", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_THANE_CHALLENGERS, player);
                                 break;
                             case QUEST_BFV_FINAL:
                                 events.ScheduleEvent(EVENT_VALHALAS_SECOND, 8s);
-                                me->Yell("From the depths of Icecrown Citadel, one of the Lich King's chosen comes to put an end to the existence of $N and his friends.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(SAY_FINAL_CHALLENGERS, player);
                                 break;
                         }
 
@@ -273,21 +265,21 @@ public:
                         switch (currentQuest)
                         {
                             case QUEST_BFV_FALLEN_HEROES:
-                                me->Yell("There can only be one outcome to such a battle: death for one side or the other. Let $n prove himself upon the bones of these outsiders who have fallen before!", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                                me->TextEmote("The fallen heroes of Valhalas emerge from the ground to do battle once more!", nullptr, true);
+                                Talk(SAY_FALLEN_HEROES_STAKES, ObjectAccessor::GetPlayer(*me, playerGUID));
+                                Talk(EMOTE_FALLEN_HEROES_ARRIVE);
                                 break;
                             case QUEST_BFV_DARK_MASTER:
-                                me->TextEmote("Khit'rix the Dark Master skitters into Valhalas from the southeast!", nullptr, true);
+                                Talk(EMOTE_DARK_MASTER_ARRIVE);
                                 break;
                             case QUEST_BFV_CARNAGE:
-                                me->TextEmote("Lumbering in from the south, the smell of Carnage precedes him!", nullptr, true);
+                                Talk(EMOTE_CARNAGE_ARRIVE);
                                 break;
                             case QUEST_BFV_THANE:
-                                me->TextEmote("Thane Banahogg appears upon the overlook to the southeast!", nullptr, true);
+                                Talk(EMOTE_THANE_ARRIVE);
                                 break;
                             case QUEST_BFV_FINAL:
-                                me->Yell("Warriors of Jotunheim, I present to you, Blood Prince Sandoval!", LANG_UNIVERSAL);
-                                me->TextEmote("Without warning, Prince Sandoval magically appears within Valhalas!", nullptr, true);
+                                Talk(SAY_FINAL_OPPONENT);
+                                Talk(EMOTE_FINAL_ARRIVE);
                                 break;
                         }
 
@@ -296,29 +288,65 @@ public:
                     }
                 case EVENT_VALHALAS_THIRD:
                     {
-                        me->Yell("In defeating him, he and his fighting companions have proven themselves worthy of battle in this most sacred place of vrykul honor.", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID));
-                        events.ScheduleEvent(EVENT_VALHALAS_THIRD + 2, 7s);
+                        if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                            Talk(SAY_FINAL_CHAMPION_1, player);
+                        events.ScheduleEvent(EVENT_VALHALAS_THIRD_2, 7s);
                         break;
                     }
-                case EVENT_VALHALAS_THIRD+2:
+                case EVENT_VALHALAS_THIRD_2:
                     {
-                        me->Yell("ALL HAIL $N, CHAMPION OF VALHALAS! ", LANG_UNIVERSAL, ObjectAccessor::GetPlayer(*me, playerGUID2));
+                        if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
+                            Talk(SAY_FINAL_CHAMPION_2, player);
+                        EndBattle();
                         break;
                     }
                 case EVENT_VALHALAS_CHECK_PLAYER:
                     {
-                        bool fail = true;
-                        if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
-                            if (me->GetDistance(player) < 100.0f)
+                        Player* player = ObjectAccessor::GetPlayer(*me, playerGUID);
+                        if (!player || me->GetDistance(player) >= 100.0f)
+                        {
+                            EndBattle();
+                            break;
+                        }
+
+                        if (summons.IsAnyCreatureAlive())
+                        {
+                            if (!player->HasQuest(currentQuest))
+                                EndBattle();
+                            else
+                                events.Repeat(5s);
+                        }
+                        else
+                        {
+                            switch (currentQuest)
                             {
-                                fail = false;
-                                CheckSummons();
+                                case QUEST_BFV_FALLEN_HEROES:
+                                    Talk(SAY_FALLEN_HEROES_VICTORY, player);
+                                    break;
+                                case QUEST_BFV_DARK_MASTER:
+                                    Talk(SAY_DARK_MASTER_VICTORY, player);
+                                    break;
+                                case QUEST_BFV_SIGRID:
+                                    Talk(SAY_SIGRID_VICTORY, player);
+                                    break;
+                                case QUEST_BFV_CARNAGE:
+                                    Talk(SAY_CARNAGE_VICTORY, player);
+                                    break;
+                                case QUEST_BFV_THANE:
+                                    Talk(SAY_THANE_VICTORY, player);
+                                    break;
+                                case QUEST_BFV_FINAL:
+                                    Talk(SAY_FINAL_VICTORY, player);
+                                    break;
                             }
 
-                        if (fail)
-                            EnterEvadeMode();
+                            player->GroupEventHappens(currentQuest, player);
 
-                        events.Repeat(5s);
+                            if (currentQuest == QUEST_BFV_FINAL)
+                                events.ScheduleEvent(EVENT_VALHALAS_THIRD, 7s);
+                            else
+                                EndBattle();
+                        }
                         break;
                     }
             }
@@ -337,22 +365,22 @@ public:
         switch (quest->GetQuestId())
         {
             case QUEST_BFV_FALLEN_HEROES:
-                creature->Say("Valhalas is yours to win or die in, $N. But whatever you do, stay within the bounds of the arena. To flee is to lose and be dishonored.", LANG_UNIVERSAL, player);
+                creature->AI()->Talk(SAY_FALLEN_HEROES_ACCEPT, player);
                 break;
             case QUEST_BFV_DARK_MASTER:
-                creature->Say("Prepare yourself. Khit'rix will be entering Valhalas from the southeast. Remember, do not leave the ring or you will lose the battle.", LANG_UNIVERSAL, player);
+                creature->AI()->Talk(SAY_DARK_MASTER_ACCEPT, player);
                 break;
             case QUEST_BFV_SIGRID:
-                creature->Yell("Sigrid Iceborn has returned to the heights of Jotunheim to prove herself against $N. When last they met, $N bester her in personal combat. Let us see the outcome of this match.", LANG_UNIVERSAL, player);
+                creature->AI()->Talk(SAY_SIGRID_ACCEPT, player);
                 break;
             case QUEST_BFV_CARNAGE:
-                creature->Say("Carnage is coming! Remember, no matter what you do, do NOT leave the battle ring or I will disqualify you and your group.", LANG_UNIVERSAL);
+                creature->AI()->Talk(SAY_CARNAGE_ACCEPT);
                 break;
             case QUEST_BFV_THANE:
-                creature->Say("Look to the southeast and you will see the thane upon the platform near Gjonner the Merciless when he shows himself. Let him come down. Stay within the ring of Valhalas.", LANG_UNIVERSAL);
+                creature->AI()->Talk(SAY_THANE_ACCEPT);
                 break;
             case QUEST_BFV_FINAL:
-                creature->Say("It's too late to run now. Do not leave the ring. Die bravely, $N!", LANG_UNIVERSAL);
+                creature->AI()->Talk(SAY_FINAL_ACCEPT, player);
                 break;
         }
 
@@ -501,7 +529,7 @@ public:
                         events.RescheduleEvent(EVENT_SOUL_COAX, 5s);
                     }
                     else
-                        me->DespawnOrUnsummon(1);
+                        me->DespawnOrUnsummon(1ms);
                     break;
                 case EVENT_SOUL_COAX:
                     Talk(SAY_ARETE_1);
@@ -523,11 +551,8 @@ public:
                     {
                         soul->SetCanFly(true);
                         soul->SetVisible(true);
-                        Movement::MoveSplineInit init(soul);
-                        init.MoveTo(soul->GetPositionX(), soul->GetPositionY(), soul->GetPositionZ() + 5.0f);
-                        init.SetVelocity(1.0f);
-                        init.Launch();
                         soul->CastSpell(soul, 64462, true); // Drown
+                        soul->GetMotionMaster()->MovePoint(0, soul->GetPositionX(), soul->GetPositionY(), soul->GetPositionZ() + 5.0f, FORCED_MOVEMENT_NONE, 1.f);
                     }
                     events.ScheduleEvent(EVENT_SCENE_1, 6s);
                     break;
@@ -580,14 +605,14 @@ public:
                     if (Creature* soul = ObjectAccessor::GetCreature(*me, _landgrenSoulGUID))
                     {
                         soul->AI()->Talk(SAY_SOUL_4);
-                        soul->DespawnOrUnsummon(2000);
+                        soul->DespawnOrUnsummon(2s);
                     }
                     events.ScheduleEvent(EVENT_SCENE_10, 3s);
                     break;
                 case EVENT_SCENE_10:
                     me->ReplaceAllNpcFlags(UNIT_NPC_FLAG_QUESTGIVER);
                     Talk(SAY_ARETE_6);
-                    me->DespawnOrUnsummon(60000);
+                    me->DespawnOrUnsummon(60s);
                     break;
             }
         }
@@ -690,23 +715,28 @@ public:
 
     struct npc_tirions_gambit_tirionAI : npc_escortAI
     {
-        npc_tirions_gambit_tirionAI(Creature* creature) : npc_escortAI(creature), summons(me)
+        npc_tirions_gambit_tirionAI(Creature* creature) : npc_escortAI(creature), summons(me), _eventOver(false)
         {
         }
 
         EventMap events;
         SummonList summons;
+        bool _eventOver;
 
         void Reset() override
         {
             me->setActive(false);
             me->SetStandState(UNIT_STAND_STATE_STAND);
+            _eventOver = false;
         }
 
         void SetData(uint32 type, uint32 data) override
         {
-            if (type == 1 && data == 1)
+            if (type == 1 && data == 1 && !_eventOver)
+            {
                 events.ScheduleEvent(EVENT_SCENE_0 + 30, 10s);
+                _eventOver = true;
+            }
         }
 
         void DoAction(int32 param) override
@@ -718,7 +748,8 @@ public:
                 Talk(0);
                 events.Reset();
                 summons.DespawnAll();
-                Start(false, false);
+                me->SetWalk(true);
+                Start(false);
 
                 int8 i = -1;
                 std::list<Creature*> cList;
@@ -750,12 +781,13 @@ public:
             summons.Despawn(summon);
         }
 
+        using CreatureAI::WaypointReached;
         void WaypointReached(uint32 pointId) override
         {
             switch (pointId)
             {
                 case 6:
-                    me->SummonCreature(NPC_INVOKER_BASALEPH, 6130.26f, 2764.83f, 573.92f, 5.19f, TEMPSUMMON_TIMED_DESPAWN, 10 * MINUTE * IN_MILLISECONDS);
+                    me->SummonCreature(NPC_INVOKER_BASALEPH, 6130.26f, 2764.83f, 573.92f, 5.19f, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
                     Talk(1);
                     break;
                 case 15:
@@ -796,7 +828,7 @@ public:
                                 summon->SetUInt32Value(UNIT_NPC_EMOTESTATE, param);
                                 break;
                             case ACTION_SUMMON_DESPAWN:
-                                summon->DespawnOrUnsummon(param);
+                                summon->DespawnOrUnsummon(Milliseconds(param));
                                 break;
                             case ACTION_SUMMON_ORIENTATION:
                                 summon->SetFacingTo(param / 100.0f);
@@ -820,9 +852,9 @@ public:
                     Talk(2);
                     DoSummonAction(NPC_DISGUISED_CRUSADER, ACTION_SUMMON_ORIENTATION, 200);
 
-                    me->SummonCreature(NPC_CHOSEN_ZEALOT, 6160.74f, 2695.90f, 573.92f, 2.04f, TEMPSUMMON_TIMED_DESPAWN, 5 * MINUTE * IN_MILLISECONDS);
-                    me->SummonCreature(NPC_CHOSEN_ZEALOT, 6164.98f, 2697.90f, 573.92f, 2.04f, TEMPSUMMON_TIMED_DESPAWN, 5 * MINUTE * IN_MILLISECONDS);
-                    me->SummonCreature(NPC_CHOSEN_ZEALOT, 6161.26f, 2700.05f, 573.92f, 2.04f, TEMPSUMMON_TIMED_DESPAWN, 5 * MINUTE * IN_MILLISECONDS);
+                    me->SummonCreature(NPC_CHOSEN_ZEALOT, 6160.74f, 2695.90f, 573.92f, 2.04f, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
+                    me->SummonCreature(NPC_CHOSEN_ZEALOT, 6164.98f, 2697.90f, 573.92f, 2.04f, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
+                    me->SummonCreature(NPC_CHOSEN_ZEALOT, 6161.26f, 2700.05f, 573.92f, 2.04f, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000);
 
                     DoSummonAction(NPC_CHOSEN_ZEALOT, ACTION_SUMMON_MOVE_STRAIGHT, 27);
                     events.ScheduleEvent(EVENT_SCENE_0, 30s);
@@ -843,7 +875,7 @@ public:
                     break;
                 case EVENT_SCENE_0+3:
                     Talk(3);
-                    if (Creature* cr = me->SummonCreature(NPC_TIRION_LICH_KING, 6161.26f, 2700.05f, 573.92f, 2.04f, TEMPSUMMON_TIMED_DESPAWN, 5 * MINUTE * IN_MILLISECONDS))
+                    if (Creature* cr = me->SummonCreature(NPC_TIRION_LICH_KING, 6161.26f, 2700.05f, 573.92f, 2.04f, TEMPSUMMON_CORPSE_TIMED_DESPAWN, 60000))
                         cr->GetMotionMaster()->MovePoint(2, 6131.93f, 2756.84f, 573.92f);
                     events.ScheduleEvent(EVENT_SCENE_0 + 4, 4s);
                     break;
@@ -984,7 +1016,6 @@ public:
                             if (target)
                                 (*itr)->AI()->AttackStart(target);
                         }
-
                         break;
                     }
                 case EVENT_SCENE_0+30:
@@ -1022,9 +1053,9 @@ public:
                         {
                             if (summon->GetEntry() == NPC_TIRION_LICH_KING)
                                 summon->CastSpell(summon, SPELL_LICH_KINGS_FURY, false);
-                            summon->DespawnOrUnsummon(summon->GetEntry() == NPC_TIRION_LICH_KING ? 10000 : 4000);
+                            summon->DespawnOrUnsummon(summon->GetEntry() == NPC_TIRION_LICH_KING ? 10s : 4s);
                         }
-                    me->DespawnOrUnsummon(10000);
+                    me->DespawnOrUnsummon(10s);
                     break;
             }
         }
@@ -1214,7 +1245,7 @@ class spell_anti_air_rocket_bomber : public SpellScript
     void HandleDummy(SpellEffIndex effIndex)
     {
         PreventHitDefaultEffect(effIndex);
-        const WorldLocation* loc = GetExplTargetDest();
+        WorldLocation const* loc = GetExplTargetDest();
         GetCaster()->CastSpell(loc->GetPositionX(), loc->GetPositionY(), loc->GetPositionZ(), GetSpellInfo()->Effects[effIndex].CalcValue(), true);
     }
 
@@ -1257,8 +1288,8 @@ public:
 
             player->CastSpell(player, SPELL_WAITING_FOR_A_BOMBER, true);
             player->CastSpell(player, SPELL_FLIGHT_ORDERS, true);
-            events.ScheduleEvent(EVENT_START_FLIGHT, 0);
-            events.ScheduleEvent(EVENT_TAKE_PASSENGER, 3000);
+            events.ScheduleEvent(EVENT_START_FLIGHT, 0ms);
+            events.ScheduleEvent(EVENT_TAKE_PASSENGER, 3s);
             me->SetCanFly(true);
             me->AddUnitMovementFlag(MOVEMENTFLAG_FLYING);
             me->SetSpeed(MOVE_FLIGHT, 0.1f);
@@ -1310,29 +1341,11 @@ public:
                                 turret->HandleSpellClick(owner, 0);
                                 return;
                             }
-                    me->DespawnOrUnsummon(1);
+                    me->DespawnOrUnsummon(1ms);
                     break;
                 case EVENT_START_FLIGHT:
                     {
-                        WPPath* path = sSmartWaypointMgr->GetPath(me->GetEntry());
-                        if (!path || path->empty())
-                        {
-                            me->DespawnOrUnsummon(1);
-                            return;
-                        }
-
-                        Movement::PointsArray pathPoints;
-                        pathPoints.push_back(G3D::Vector3(me->GetPositionX(), me->GetPositionY(), me->GetPositionZ()));
-
-                        uint32 wpCounter = 1;
-                        WPPath::const_iterator itr;
-                        while ((itr = path->find(wpCounter++)) != path->end())
-                        {
-                            WayPoint* wp = itr->second;
-                            pathPoints.push_back(G3D::Vector3(wp->x, wp->y, wp->z));
-                        }
-
-                        me->GetMotionMaster()->MoveSplinePath(&pathPoints);
+                        me->GetMotionMaster()->MovePath(me->GetEntry(), FORCED_MOVEMENT_NONE, PathSource::SMART_WAYPOINT_MGR);
                         events.ScheduleEvent(EVENT_CHECK_PATH_REGEN_HEALTH_BURN_DAMAGE, 1min);
                         events.ScheduleEvent(EVENT_SYNCHRONIZE_SHIELDS, 5s);
                         break;
@@ -1342,7 +1355,7 @@ public:
                         // Check if path is finished
                         if (me->GetMotionMaster()->GetCurrentMovementGeneratorType() != ESCORT_MOTION_TYPE)
                         {
-                            me->DespawnOrUnsummon(1);
+                            me->DespawnOrUnsummon(1ms);
                             return;
                         }
 
@@ -1381,7 +1394,7 @@ public:
                                     station->RemoveAurasDueToSpell(SPELL_INFRA_GREEN_SHIELD);
                             }
                         if (!playerPresent)
-                            me->DespawnOrUnsummon(1);
+                            me->DespawnOrUnsummon(1ms);
                     }
                     events.ScheduleEvent(EVENT_SYNCHRONIZE_SHIELDS, 1s);
                     break;
@@ -1461,7 +1474,6 @@ class spell_deliver_gryphon : public SpellScript
     }
 };
 
-// Theirs
 /*######
 ## npc_guardian_pavilion
 ######*/
@@ -1469,9 +1481,6 @@ class spell_deliver_gryphon : public SpellScript
 enum GuardianPavilion
 {
     SPELL_TRESPASSER_H                            = 63987,
-    AREA_SUNREAVER_PAVILION                       = 4676,
-
-    AREA_SILVER_COVENANT_PAVILION                 = 4677,
     SPELL_TRESPASSER_A                            = 63986,
 };
 
@@ -1496,7 +1505,7 @@ public:
             if (!who || !who->IsPlayer() || !me->IsHostileTo(who) || !me->isInBackInMap(who, 5.0f))
                 return;
 
-            if (who->HasAura(SPELL_TRESPASSER_H) || who->HasAura(SPELL_TRESPASSER_A))
+            if (who->HasAnyAuras(SPELL_TRESPASSER_H, SPELL_TRESPASSER_A))
                 return;
 
             if (who->ToPlayer()->GetTeamId() == TEAM_ALLIANCE)
@@ -1557,6 +1566,8 @@ public:
 
         void Reset() override
         {
+            // EnterEvadeMode override leaves UNIT_STATE_EVADE set; clear it so the dummy stays attackable
+            me->ClearUnitState(UNIT_STATE_EVADE);
             me->SetControlled(true, UNIT_STATE_STUNNED);
             isVulnerable = false;
 
@@ -1684,7 +1695,7 @@ enum BlessedBanner
     NPC_ARGENT_MASON                    = 30900,
     NPC_REANIMATED_CAPTAIN              = 30986,
     NPC_SCOURGE_DRUDGE                  = 30984,
-    NPC_HIDEOUS_PLAGEBRINGER            = 30987,
+    NPC_HIDEOUS_PLAGUEBRINGER           = 30987,
     NPC_HALOF_THE_DEATHBRINGER          = 30989,
     NPC_LK                              = 31013,
 
@@ -1707,6 +1718,10 @@ enum BlessedBanner
     EVENT_WAVE_SPAWN                    = 7,
     EVENT_HALOF                         = 8,
     EVENT_ENDED                         = 9,
+
+    GROUP_WAVE_PLAGUEBRINGERS           = 0,
+    GROUP_WAVE_CAPTAINS                 = 1,
+    GROUP_WAVE_HALOF                    = 2,
 };
 
 Position const DalforsPos[3] =
@@ -1764,7 +1779,6 @@ public:
     {
         npc_blessed_bannerAI(Creature* creature) : ScriptedAI(creature), Summons(me)
         {
-            HalofSpawned = false;
             PhaseCount = 0;
             Summons.DespawnAll();
 
@@ -1772,8 +1786,6 @@ public:
         }
 
         EventMap events;
-
-        bool HalofSpawned;
 
         uint32 PhaseCount;
 
@@ -1796,9 +1808,11 @@ public:
 
         void MoveInLineOfSight(Unit* /*who*/) override { }
 
-        void JustSummoned(Creature* Summoned) override
+        void JustSummoned(Creature* summon) override
         {
-            Summons.Summon(Summoned);
+            Summons.Summon(summon);
+            if (summon->GetEntry() == NPC_HALOF_THE_DEATHBRINGER)
+                guidHalof = summon->GetGUID();
         }
 
         void JustDied(Unit* /*killer*/) override
@@ -1951,37 +1965,7 @@ public:
                             if (Creature* LK = GetClosestCreatureWithEntry(me, NPC_LK, 100))
                                 LK->AI()->Talk(LK_TALK_3);
                         }
-                        if (Creature* tempsum = DoSummon(NPC_SCOURGE_DRUDGE, Mason3Pos[0]))
-                        {
-                            tempsum->SetHomePosition(DalforsPos[2]);
-                            tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                        }
-                        if (urand(0, 1) == 0)
-                        {
-                            if (Creature* tempsum = DoSummon(NPC_HIDEOUS_PLAGEBRINGER, Mason1Pos[0]))
-                            {
-                                tempsum->SetHomePosition(DalforsPos[2]);
-                                tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                            }
-                            if (Creature* tempsum = DoSummon(NPC_HIDEOUS_PLAGEBRINGER, Mason2Pos[0]))
-                            {
-                                tempsum->SetHomePosition(DalforsPos[2]);
-                                tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                            }
-                        }
-                        else
-                        {
-                            if (Creature* tempsum = DoSummon(NPC_REANIMATED_CAPTAIN, Mason1Pos[0]))
-                            {
-                                tempsum->SetHomePosition(DalforsPos[2]);
-                                tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                            }
-                            if (Creature* tempsum = DoSummon(NPC_REANIMATED_CAPTAIN, Mason2Pos[0]))
-                            {
-                                tempsum->SetHomePosition(DalforsPos[2]);
-                                tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                            }
-                        }
+                        me->SummonCreatureGroup(urand(GROUP_WAVE_PLAGUEBRINGERS, GROUP_WAVE_CAPTAINS));
 
                         PhaseCount++;
 
@@ -1995,23 +1979,7 @@ public:
                     {
                         if (Creature* LK = GetClosestCreatureWithEntry(me, NPC_LK, 100))
                             LK->AI()->Talk(LK_TALK_4);
-                        if (Creature* tempsum = DoSummon(NPC_SCOURGE_DRUDGE, Mason1Pos[0]))
-                        {
-                            tempsum->SetHomePosition(DalforsPos[2]);
-                            tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                        }
-                        if (Creature* tempsum = DoSummon(NPC_SCOURGE_DRUDGE, Mason2Pos[0]))
-                        {
-                            tempsum->SetHomePosition(DalforsPos[2]);
-                            tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                        }
-                        if (Creature* tempsum = DoSummon(NPC_HALOF_THE_DEATHBRINGER, DalforsPos[0]))
-                        {
-                            HalofSpawned = true;
-                            guidHalof = tempsum->GetGUID();
-                            tempsum->SetHomePosition(DalforsPos[2]);
-                            tempsum->AI()->AttackStart(GetClosestCreatureWithEntry(me, NPC_BLESSED_BANNER, 100));
-                        }
+                        me->SummonCreatureGroup(GROUP_WAVE_HALOF);
                     }
                     break;
                 case EVENT_ENDED:
@@ -2027,7 +1995,7 @@ public:
                     if (Halof->isDead())
                     {
                         DoCast(me, SPELL_CRUSADERS_SPIRE_VICTORY, true);
-                        Summons.DespawnEntry(NPC_HIDEOUS_PLAGEBRINGER);
+                        Summons.DespawnEntry(NPC_HIDEOUS_PLAGUEBRINGER);
                         Summons.DespawnEntry(NPC_REANIMATED_CAPTAIN);
                         Summons.DespawnEntry(NPC_SCOURGE_DRUDGE);
                         Summons.DespawnEntry(NPC_HALOF_THE_DEATHBRINGER);
@@ -2133,9 +2101,31 @@ public:
     }
 };
 
+enum WaterTerror
+{
+    SPELL_WATER_TERROR_FROST_NOVA = 57668
+};
+
+// 57652 - Crashing Wave
+class spell_crashing_wave : public SpellScript
+{
+    PrepareSpellScript(spell_crashing_wave);
+
+    void RecalculateDamage()
+    {
+        if (Unit* target = GetHitUnit())
+            if (target->HasAura(SPELL_WATER_TERROR_FROST_NOVA))
+                SetHitDamage(GetHitDamage() * 2);
+    }
+
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_crashing_wave::RecalculateDamage);
+    }
+};
+
 void AddSC_icecrown()
 {
-    // Ours
     new npc_black_knight_graveyard();
     new npc_battle_at_valhalas();
     new npc_llod_generic();
@@ -2149,10 +2139,9 @@ void AddSC_icecrown()
     new npc_infra_green_bomber_generic();
     RegisterSpellScript(spell_onslaught_or_call_bone_gryphon);
     RegisterSpellScript(spell_deliver_gryphon);
-
-    // Theirs
     new npc_guardian_pavilion();
     new npc_tournament_training_dummy();
     new npc_blessed_banner();
     new npc_frostbrood_skytalon();
+    RegisterSpellScript(spell_crashing_wave);
 }

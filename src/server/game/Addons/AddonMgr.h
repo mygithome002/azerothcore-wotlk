@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,7 +22,6 @@
 #include <array>
 #include <list>
 #include <string>
-#include <utility>
 
 struct AddonInfo
 {
@@ -38,10 +37,7 @@ struct AddonInfo
 
 struct SavedAddon
 {
-    SavedAddon(std::string  name, uint32 crc) : Name(std::move(name))
-    {
-        CRC = crc;
-    }
+    SavedAddon(std::string  name, uint32 crc) : Name(std::move(name)), CRC(crc) {}
 
     std::string Name;
     uint32 CRC;
@@ -49,6 +45,9 @@ struct SavedAddon
 
 struct BannedAddon
 {
+    BannedAddon(uint32 id, std::array<uint8, 16> const& nameMD5, std::array<uint8, 16> const& versionMD5, uint32 timestamp)
+        : Id(id), NameMD5(nameMD5), VersionMD5(versionMD5), Timestamp(timestamp) {}
+
     uint32 Id;
     std::array<uint8, 16> NameMD5;
     std::array<uint8, 16> VersionMD5;
@@ -61,7 +60,7 @@ namespace AddonMgr
 {
     void LoadFromDB();
     void SaveAddon(AddonInfo const& addon);
-    SavedAddon const* GetAddonInfo(const std::string& name);
+    SavedAddon const* GetAddonInfo(std::string const& name);
 
     typedef std::list<BannedAddon> BannedAddonList;
     BannedAddonList const* GetBannedAddons();

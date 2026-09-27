@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -47,8 +47,7 @@ enum Misc
     SPELL_BALL_OF_FLAME                     = 48246,
     SPELL_RITUAL_OF_THE_SWORD               = 48276,
     SPELL_RITUAL_STRIKE                     = 48331,
-    SPELL_SINSTER_STRIKE_N                  = 15667,
-    SPELL_SINSTER_STRIKE_H                  = 59409,
+    SPELL_SINISTER_STRIKE                  = 15667,
     EQUIP_SWORD                             = 40343,
 
     // CHANNELERS
@@ -113,9 +112,11 @@ public:
             instance = creature->GetInstanceScript();
             Started = false;
             ArthasGUID.Clear();
+            lastBrazierGUID.Clear();
         }
 
         ObjectGuid ArthasGUID;
+        ObjectGuid lastBrazierGUID;
         bool Started;
         InstanceScript* instance;
         EventMap events;
@@ -133,13 +134,20 @@ public:
             summons.DespawnAll();
             events.Reset();
             events2.Reset();
+            lastBrazierGUID.Clear();
+
             if (!Started)
+            {
                 me->SetImmuneToAll(true);
+                me->SetHover(false);
+                me->SetDisableGravity(false);
+            }
             else
             {
                 me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                 me->SetImmuneToAll(false);
                 me->SetHover(true);
+                me->SetDisableGravity(true);
             }
         }
 
@@ -157,7 +165,7 @@ public:
             me->SetImmuneToAll(true);
             Started = true;
             me->setActive(true);
-            events2.ScheduleEvent(EVENT_SVALA_START, 5000);
+            events2.ScheduleEvent(EVENT_SVALA_START, 5s);
             if (Creature* pArthas = me->SummonCreature(NPC_ARTHAS, 295.81f, -366.16f, 92.57f, 1.58f, TEMPSUMMON_TIMED_OR_CORPSE_DESPAWN, 59000))
                 ArthasGUID = pArthas->GetGUID();
 
@@ -193,7 +201,7 @@ public:
         {
             summons.DespawnAll();
             Talk(SAY_DEATH);
-            if(instance)
+            if (instance)
                 instance->SetData(DATA_SVALA_SORROWGRAVE, DONE);
         }
 
@@ -230,6 +238,7 @@ public:
                     events2.ScheduleEvent(EVENT_SVALA_TALK3, 3s);
                     break;
                 case EVENT_SVALA_TALK3:
+                    me->SetDisableGravity(true);
                     me->SetFloatValue(UNIT_FIELD_HOVERHEIGHT, 6.0f);
                     me->SetHover(true);
                     me->AddUnitState(UNIT_STATE_NO_ENVIRONMENT_UPD);
@@ -280,6 +289,7 @@ public:
                     events2.ScheduleEvent(EVENT_SVALA_TALK8, 13s);
                     break;
                 case EVENT_SVALA_TALK8:
+                    me->SetDisableGravity(false);
                     me->GetMotionMaster()->MoveFall(0, true);
                     events2.ScheduleEvent(EVENT_SVALA_TALK9, 2s);
                     break;
@@ -303,27 +313,45 @@ public:
             switch (events.ExecuteEvent())
             {
                 case EVENT_SORROWGRAVE_SS:
-                    me->CastSpell(me->GetVictim(), IsHeroic() ? SPELL_SINSTER_STRIKE_H : SPELL_SINSTER_STRIKE_N, false);
+                    me->CastSpell(me->GetVictim(), SPELL_SINISTER_STRIKE, false);
                     events.ScheduleEvent(EVENT_SORROWGRAVE_SS, 3s, 5s);
                     break;
                 case EVENT_SORROWGRAVE_FLAMES:
                     summons.DespawnAll();
                     me->CastSpell(me, SPELL_CALL_FLAMES, false);
                     events.ScheduleEvent(EVENT_SORROWGRAVE_FLAMES2, 500ms);
-                    events.ScheduleEvent(EVENT_SORROWGRAVE_FLAMES2, 1s);
+                    events.ScheduleEvent(EVENT_SORROWGRAVE_FLAMES2, 2500ms);
+                    events.ScheduleEvent(EVENT_SORROWGRAVE_FLAMES2, 4500ms);
                     events.ScheduleEvent(EVENT_SORROWGRAVE_FLAMES, 8s, 12s);
                     break;
                 case EVENT_SORROWGRAVE_FLAMES2:
+                {
+                    std::list<Creature*> braziers;
+                    me->GetCreaturesWithEntryInRange(braziers, 100.0f, NPC_FLAME_BRAZIER);
+                    if (!braziers.empty())
                     {
-                        std::list<Creature*> braziers;
-                        me->GetCreaturesWithEntryInRange(braziers, 100.0f, NPC_FLAME_BRAZIER);
-                        if (!braziers.empty())
+                        std::vector<Creature*> availableBraziers;
+
+                        for (Creature* brazier : braziers)
                         {
-                            for (std::list<Creature*>::const_iterator itr = braziers.begin(); itr != braziers.end(); ++itr)
-                                (*itr)->CastCustomSpell(SPELL_BALL_OF_FLAME, SPELLVALUE_MAX_TARGETS, 1, (*itr), true);
+                            if (brazier->GetGUID() != lastBrazierGUID)
+                                availableBraziers.push_back(brazier);
                         }
-                        break;
+
+                        if (availableBraziers.empty())
+                            availableBraziers.assign(braziers.begin(), braziers.end());
+
+                        uint32 randomIndex = urand(0, availableBraziers.size() - 1);
+                        Creature* selectedBrazier = availableBraziers[randomIndex];
+
+                        if (selectedBrazier)
+                        {
+                            selectedBrazier->CastCustomSpell(SPELL_BALL_OF_FLAME, SPELLVALUE_MAX_TARGETS, 1, nullptr, false);
+                            lastBrazierGUID = selectedBrazier->GetGUID();
+                        }
                     }
+                    break;
+                }
                 case EVENT_SORROWGRAVE_RITUAL:
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 0.0f, true))
                     {
@@ -337,12 +365,10 @@ public:
                         DoTeleportPlayer(target, 296.632f, -346.075f, 90.63f, 4.6f);
                         me->NearTeleportTo(296.632f, -346.075f, 110.0f, 4.6f, false);
                         me->SetControlled(true, UNIT_STATE_ROOT);
-                        me->RemoveAurasByType(SPELL_AURA_PERIODIC_DAMAGE);
-                        me->RemoveAurasByType(SPELL_AURA_PERIODIC_DAMAGE_PERCENT);
-                        me->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+                        me->SetDisableGravity(true);
                     }
 
-                    events.DelayEvents(25001); // +1 just to be sure
+                    events.DelayEvents(25001ms); // +1 just to be sure
                     events.ScheduleEvent(EVENT_SORROWGRAVE_RITUAL_SPELLS, 0ms);
                     events.ScheduleEvent(EVENT_SORROWGRAVE_FINISH_RITUAL, 25s);
                     return;
@@ -353,8 +379,11 @@ public:
                 case EVENT_SORROWGRAVE_FINISH_RITUAL:
                     me->RemoveUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
                     me->SetControlled(false, UNIT_STATE_ROOT);
+                    me->SetDisableGravity(false);
+                    me->SetFloatValue(UNIT_FIELD_HOVERHEIGHT, 3.0f);
+
                     AttackStart(me->GetVictim());
-                    me->GetMotionMaster()->MoveFall(0, true);
+                    me->GetMotionMaster()->MoveChase(me->GetVictim());
                     summons.DespawnAll();
                     break;
             }

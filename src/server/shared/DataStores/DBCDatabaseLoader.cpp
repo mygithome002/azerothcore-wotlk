@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -18,6 +18,7 @@
 #include "DBCDatabaseLoader.h"
 #include "DatabaseEnv.h"
 #include "Errors.h"
+#include "QueryResult.h"
 #include "StringFormat.h"
 
 DBCDatabaseLoader::DBCDatabaseLoader(char const* tableName, char const* dbcFormatString, std::vector<char*>& stringPool)
@@ -30,6 +31,8 @@ DBCDatabaseLoader::DBCDatabaseLoader(char const* tableName, char const* dbcForma
     // Get sql index position
     int32 indexPos = -1;
     _recordSize = DBCFileLoader::GetFormatRecordSize(_dbcFormat, &indexPos);
+    if (indexPos >= 0)
+        _sqlIndexPos = indexPos;
 
     ASSERT(_recordSize);
 }
@@ -71,11 +74,11 @@ char* DBCDatabaseLoader::Load(uint32& records, char**& indexTable)
     {
         Field* fields = result->Fetch();
         uint32 indexValue = fields[_sqlIndexPos].Get<uint32>();
-        char* dataValue = indexTable[indexValue];
+        char* oldDataValue = indexTable[indexValue];
 
         // If exist in DBC file override from DB
         newIndexes[newRecords] = indexValue;
-        dataValue = &dataTable[newRecords++ * _recordSize];
+        char* dataValue = &dataTable[newRecords++ * _recordSize];
 
         uint32 dataOffset = 0;
         uint32 sqlColumnNumber = 0;
@@ -99,7 +102,12 @@ char* DBCDatabaseLoader::Load(uint32& records, char**& indexTable)
                     dataOffset += sizeof(uint8);
                     break;
                 case FT_STRING:
-                    *reinterpret_cast<char**>(&dataValue[dataOffset]) = CloneStringToPool(fields[sqlColumnNumber].Get<std::string>());
+                    // an empty column means "not overridden", not "blank it"
+                    if (fields[sqlColumnNumber].Get<std::string>().empty() && oldDataValue)
+                        *reinterpret_cast<char**>(&dataValue[dataOffset]) = *reinterpret_cast<char**>(&oldDataValue[dataOffset]);
+                    else
+                        *reinterpret_cast<char**>(&dataValue[dataOffset]) = CloneStringToPool(fields[sqlColumnNumber].Get<std::string>());
+
                     dataOffset += sizeof(char*);
                     break;
                 case FT_SORT:

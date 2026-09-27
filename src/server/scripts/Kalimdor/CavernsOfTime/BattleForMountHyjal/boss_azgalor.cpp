@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -44,14 +44,7 @@ enum Texts
 struct boss_azgalor : public BossAI
 {
 public:
-    boss_azgalor(Creature* creature) : BossAI(creature, DATA_AZGALOR)
-    {
-        _recentlySpoken = false;
-        scheduler.SetValidator([this]
-            {
-                return !me->HasUnitState(UNIT_STATE_CASTING);
-            });
-    }
+    boss_azgalor(Creature* creature) : BossAI(creature, DATA_AZGALOR) { }
 
     void JustEngagedWith(Unit * who) override
     {
@@ -86,21 +79,13 @@ public:
         Talk(SAY_ONSPAWN, 1200ms);
 
         if (action == DATA_AZGALOR)
-            me->GetMotionMaster()->MovePath(HORDE_BOSS_PATH, false);
+            me->GetMotionMaster()->MoveWaypoint(HORDE_BOSS_PATH, false);
     }
 
-    void KilledUnit(Unit * victim) override
+    void KilledUnit(Unit* victim) override
     {
-        if (!_recentlySpoken && victim->IsPlayer())
-        {
-            Talk(SAY_ONSLAY);
-            _recentlySpoken = true;
-
-            scheduler.Schedule(6s, [this](TaskContext)
-            {
-                _recentlySpoken = false;
-            });
-        }
+        if (me->IsAlive())
+            Talk(SAY_ONSLAY, victim);
     }
 
     void JustDied(Unit * killer) override
@@ -110,13 +95,11 @@ public:
         if (Creature* archi = instance->GetCreature(DATA_ARCHIMONDE))
         {
             archi->AI()->DoAction(ACTION_BECOME_ACTIVE_AND_CHANNEL);
-            archi->AI()->Talk(SAY_ARCHIMONDE_INTRO, 25000ms);
+            archi->AI()->Talk(SAY_ARCHIMONDE_INTRO, 25s);
         }
         BossAI::JustDied(killer);
     }
 
-private:
-    bool _recentlySpoken;
 };
 
 class spell_azgalor_doom : public SpellScript

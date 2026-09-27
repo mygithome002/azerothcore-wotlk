@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,6 +22,7 @@
 #include "LFGMgr.h"
 #include "Language.h"
 #include "Log.h"
+#include "MapMgr.h"
 #include "MiscPackets.h"
 #include "ObjectMgr.h"
 #include "Opcodes.h"
@@ -55,7 +56,7 @@ class Aura;
     -FIX sending PartyMemberStats
 */
 
-void WorldSession::SendPartyResult(PartyOperation operation, const std::string& member, PartyResult res, uint32 val /* = 0 */)
+void WorldSession::SendPartyResult(PartyOperation operation, std::string const& member, PartyResult res, uint32 val /* = 0 */)
 {
     WorldPacket data(SMSG_PARTY_COMMAND_RESULT, 4 + member.size() + 1 + 4 + 4);
     data << uint32(operation);
@@ -91,8 +92,14 @@ void WorldSession::HandleGroupInviteOpcode(WorldPacket& recvData)
         return;
     }
 
-    if (!sScriptMgr->CanGroupInvite(invitingPlayer, membername))
+    if (!sScriptMgr->OnPlayerCanGroupInvite(invitingPlayer, membername))
         return;
+
+    if (sWorld->getBoolConfig(CONFIG_TRIAL_RESTRICTION_PARTY) && IsTrialAccount())
+    {
+        SendPartyResult(PARTY_OP_INVITE, membername, ERR_INVITE_RESTRICTED);
+        return;
+    }
 
     if (invitingPlayer->IsSpectator() || invitedPlayer->IsSpectator())
     {
@@ -102,6 +109,13 @@ void WorldSession::HandleGroupInviteOpcode(WorldPacket& recvData)
 
     // restrict invite to GMs
     if (!sWorld->getBoolConfig(CONFIG_ALLOW_GM_GROUP) && !invitingPlayer->IsGameMaster() && invitedPlayer->IsGameMaster())
+    {
+        SendPartyResult(PARTY_OP_INVITE, membername, ERR_BAD_PLAYER_NAME_S);
+        return;
+    }
+
+    // target has opted out of receiving group invites
+    if (!invitedPlayer->IsAcceptGroupInvites())
     {
         SendPartyResult(PARTY_OP_INVITE, membername, ERR_BAD_PLAYER_NAME_S);
         return;
@@ -131,6 +145,16 @@ void WorldSession::HandleGroupInviteOpcode(WorldPacket& recvData)
         return;
     }
 
+    // Battlefield raids (e.g. Wintergrasp) have their composition managed by the BF
+    // system based on queue and team balance. Letting raid members recruit outsiders
+    // bypasses Battlefield::AddOrSetPlayerToCorrectBfGroup, which on WG entry then
+    // refuses to add the invitee because they are already in a BF group.
+    if (Group* invitingGroup = invitingPlayer->GetGroup(); invitingGroup && invitingGroup->isBFGroup())
+    {
+        SendPartyResult(PARTY_OP_INVITE, membername, ERR_NOT_LEADER);
+        return;
+    }
+
     Group* group = invitingPlayer->GetGroup();
     if (group && group->isBGGroup())
         group = invitingPlayer->GetOriginalGroup();
@@ -154,7 +178,7 @@ void WorldSession::HandleGroupInviteOpcode(WorldPacket& recvData)
             data << uint32(0);                                      // unk
             data << uint8(0);                                       // count
             data << uint32(0);                                      // unk
-            invitedPlayer->GetSession()->SendPacket(&data);
+            invitedPlayer->SendDirectMessage(&data);
         }
 
         return;
@@ -214,7 +238,7 @@ void WorldSession::HandleGroupInviteOpcode(WorldPacket& recvData)
     data << uint32(0);                                      // unk
     data << uint8(0);                                       // count
     data << uint32(0);                                      // unk
-    invitedPlayer->GetSession()->SendPacket(&data);
+    invitedPlayer->SendDirectMessage(&data);
 
     SendPartyResult(PARTY_OP_INVITE, membername, ERR_PARTY_RESULT_OK);
 }
@@ -236,8 +260,42 @@ void WorldSession::HandleGroupAcceptOpcode(WorldPacket& recvData)
         return;
     }
 
-    if (!sScriptMgr->CanGroupAccept(GetPlayer(), group))
+    if (!sScriptMgr->OnPlayerCanGroupAccept(GetPlayer(), group))
         return;
+
+    Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
+
+    // Trial accounts cannot join a group whose existing members are above the trial level cap.
+    if (sWorld->getBoolConfig(CONFIG_TRIAL_RESTRICTION_PARTY) && IsTrialAccount())
+    {
+        if (uint32 trialLevelCap = sWorld->getIntConfig(CONFIG_TRIAL_LEVEL_CAP))
+        {
+            uint8 leaderLevel = leader ? leader->GetLevel() : sCharacterCache->GetCharacterLevelByGuid(group->GetLeaderGUID());
+            if (leaderLevel > trialLevelCap)
+            {
+                SendPartyResult(PARTY_OP_INVITE, "", ERR_INVITE_RESTRICTED);
+                return;
+            }
+
+            for (auto const& slot : group->GetMemberSlots())
+            {
+                if (slot.guid == GetPlayer()->GetGUID())
+                    continue;
+
+                uint8 memberLevel = 0;
+                if (Player* member = ObjectAccessor::FindConnectedPlayer(slot.guid))
+                    memberLevel = member->GetLevel();
+                else
+                    memberLevel = sCharacterCache->GetCharacterLevelByGuid(slot.guid);
+
+                if (memberLevel > trialLevelCap)
+                {
+                    SendPartyResult(PARTY_OP_INVITE, "", ERR_INVITE_RESTRICTED);
+                    return;
+                }
+            }
+        }
+    }
 
     if (group->GetLeaderGUID() == GetPlayer()->GetGUID())
     {
@@ -252,8 +310,6 @@ void WorldSession::HandleGroupAcceptOpcode(WorldPacket& recvData)
         SendPartyResult(PARTY_OP_INVITE, "", ERR_GROUP_FULL);
         return;
     }
-
-    Player* leader = ObjectAccessor::FindConnectedPlayer(group->GetLeaderGUID());
 
     // Forming a new group, create it
     if (!group->IsCreated())
@@ -297,7 +353,7 @@ void WorldSession::HandleGroupDeclineOpcode(WorldPacket& /*recvData*/)
     // report
     WorldPacket data(SMSG_GROUP_DECLINE, GetPlayer()->GetName().length());
     data << GetPlayer()->GetName();
-    leader->GetSession()->SendPacket(&data);
+    leader->SendDirectMessage(&data);
 }
 
 void WorldSession::HandleGroupUninviteGuidOpcode(WorldPacket& recvData)
@@ -444,11 +500,8 @@ void WorldSession::HandleGroupDisbandOpcode(WorldPacket& /*recvData*/)
     if (!grp && !grpInvite)
         return;
 
-    if (_player->InBattleground())
-    {
-        SendPartyResult(PARTY_OP_INVITE, "", ERR_INVITE_RESTRICTED);
+    if (_player->InBattleground()) // Do not leave group, give no error. Verified on TBC Classic
         return;
-    }
 
     /** error handling **/
     /********************/
@@ -512,6 +565,12 @@ void WorldSession::HandleLootRoll(WorldPacket& recvData)
     if (!group)
         return;
 
+    if (GetPlayer()->HasPlayerFlag(PLAYER_FLAGS_NO_PLAY_TIME))
+    {
+        SendPlayTimeWarning(PTF_UNHEALTHY_TIME, 0);
+        rollType = ROLL_PASS;
+    }
+
     group->CountRollVote(GetPlayer()->GetGUID(), guid, rollType);
 
     switch (rollType)
@@ -528,24 +587,17 @@ void WorldSession::HandleLootRoll(WorldPacket& recvData)
     }
 }
 
-void WorldSession::HandleMinimapPingOpcode(WorldPacket& recvData)
+void WorldSession::HandleMinimapPingOpcode(WorldPackets::Misc::MinimapPingClient& packet)
 {
-    if (!GetPlayer()->GetGroup())
+    if (!sMapMgr->IsValidMapCoord(GetPlayer()->GetMap()->GetId(), packet.MapX, packet.MapY))
         return;
 
-    float x, y;
-    recvData >> x;
-    recvData >> y;
+    Group* group = GetPlayer()->GetGroup();
 
-    /** error handling **/
-    /********************/
+    if (!group)
+        return;
 
-    // everything's fine, do it
-    WorldPacket data(MSG_MINIMAP_PING, (8 + 4 + 4));
-    data << GetPlayer()->GetGUID();
-    data << float(x);
-    data << float(y);
-    GetPlayer()->GetGroup()->BroadcastPacket(&data, true, -1, GetPlayer()->GetGUID());
+    group->DoMinimapPing(GetPlayer()->GetGUID(), packet.MapX, packet.MapY);
 }
 
 void WorldSession::HandleRandomRollOpcode(WorldPackets::Misc::RandomRollClient& packet)
@@ -555,10 +607,8 @@ void WorldSession::HandleRandomRollOpcode(WorldPackets::Misc::RandomRollClient& 
     maximum = packet.Max;
 
     /** error handling **/
-    if (minimum > maximum || maximum > 10000) // < 32768 for urand call
-    {
+    if (minimum > maximum || maximum > sWorld->getIntConfig(CONFIG_RANDOM_ROLL_MAXIMUM))
         return;
-    }
 
     GetPlayer()->DoRandomRoll(minimum, maximum);
 }
@@ -1203,7 +1253,7 @@ void WorldSession::HandleGroupSwapSubGroupOpcode(WorldPacket& recv_data)
     ObjectGuid guid1 = getGuid(playerName1);
     ObjectGuid guid2 = getGuid(playerName2);
 
-    if(!guid1 || !guid2)
+    if (!guid1 || !guid2)
     {
         SendPartyResult(PARTY_OP_SWAP, playerName1, ERR_GROUP_SWAP_FAILED);
         return;

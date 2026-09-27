@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -18,10 +18,15 @@
 #include "CreatureGroups.h"
 #include "Creature.h"
 #include "CreatureAI.h"
+#include "GameTime.h"
 #include "Log.h"
+#include "Map.h"
 #include "MoveSplineInit.h"
 #include "ObjectMgr.h"
+#include "QueryResult.h"
+#include "Timer.h"
 #include "WaypointMgr.h"
+#include <algorithm>
 
 FormationMgr::~FormationMgr()
 {
@@ -82,6 +87,7 @@ void FormationMgr::LoadCreatureFormations()
 {
     uint32 const oldMSTime = getMSTime();
     CreatureGroupMap.clear();
+    CreatureGroupMembers.clear();
 
     //Get group data
     QueryResult result = WorldDatabase.Query("SELECT leaderGUID, memberGUID, dist, angle, groupAI, point_1, point_2 FROM creature_formations ORDER BY leaderGUID");
@@ -158,6 +164,7 @@ void FormationMgr::LoadCreatureFormations()
         }
 
         CreatureGroupMap[memberGUID] = group_member;
+        CreatureGroupMembers[group_member.leaderGUID].push_back(memberGUID);
         ++count;
     } while (result->NextRow());
 
@@ -184,6 +191,7 @@ void CreatureGroup::RemoveMember(Creature* member)
 {
     if (m_leader == member)
     {
+        RemoveFormationMovement();
         m_leader = nullptr;
     }
 
@@ -224,9 +232,9 @@ void CreatureGroup::MemberEngagingTarget(Creature* member, Unit* target)
             continue;
         }
 
-        if (pMember->IsValidAttackTarget(target) && pMember->AI())
+        if (pMember->IsValidAttackTarget(target))
         {
-            pMember->AI()->AttackStart(target);
+            pMember->EngageWithTarget(target);
         }
     }
 }
@@ -286,19 +294,33 @@ void CreatureGroup::MemberEvaded(Creature* member)
         return;
     }
 
-    for (auto const& itr : m_members)
+    // Copy the member list first: Respawn() below takes the member out of the
+    // world, which erases it from m_members and would invalidate this loop.
+    CreatureGroupMemberType members = m_members;
+
+    for (auto const& itr : members)
     {
         Creature* pMember = itr.first;
         // This should never happen
         if (!pMember)
             continue;
 
+        // A previous member's Respawn() or EnterEvadeMode() may have removed
+        // this one from the group already.
+        if (pMember->GetFormation() != this)
+            continue;
+
         if (pMember == member || pMember->IsInEvadeMode() || !itr.second.HasGroupFlag(std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_EVADE_MASK)))
             continue;
 
-        if (itr.second.HasGroupFlag(std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_EVADE_TOGETHER)))
+        // EVADE_TOGETHER and RESPAWN_ON_EVADE are independent: living members evade, dead members respawn.
+        if (pMember->IsAlive())
         {
-            if (!pMember->IsAlive() || !pMember->IsInCombat())
+            if (!itr.second.HasGroupFlag(
+                    std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_EVADE_TOGETHER)))
+                continue;
+
+            if (!pMember->IsInCombat())
                 continue;
 
             if (pMember->IsAIEnabled)
@@ -307,7 +329,8 @@ void CreatureGroup::MemberEvaded(Creature* member)
         }
         else
         {
-            if (pMember->IsAlive())
+            if (!itr.second.HasGroupFlag(
+                    std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_RESPAWN_ON_EVADE)))
                 continue;
 
             if (itr.second.HasGroupFlag(std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_DONT_RESPAWN_LEADER_ON_EVADE)) && pMember == m_leader)
@@ -315,6 +338,48 @@ void CreatureGroup::MemberEvaded(Creature* member)
 
             pMember->Respawn();
         }
+    }
+
+    RespawnRemovedMembers(member->GetMap());
+}
+
+// In dynamic respawn mode a creature is removed from the world once its corpse decays, and RemoveFromWorld drops it
+// from this group, so members waiting in the map's respawn store are no longer in m_members. Move their stored
+// respawn time to now: ProcessRespawns() recreates them on its next check and they rejoin the group when loaded.
+void CreatureGroup::RespawnRemovedMembers(Map* map)
+{
+    auto const membersItr = sFormationMgr->CreatureGroupMembers.find(m_groupID);
+    if (membersItr == sFormationMgr->CreatureGroupMembers.end())
+        return;
+
+    time_t now = GameTime::GetGameTime().count();
+    for (ObjectGuid::LowType spawnId : membersItr->second)
+    {
+        bool const inWorld = std::any_of(m_members.begin(), m_members.end(), [spawnId](auto const& itr)
+        {
+            return itr.first->GetSpawnId() == spawnId;
+        });
+        if (inWorld)
+            continue;
+
+        auto const infoItr = sFormationMgr->CreatureGroupMap.find(spawnId);
+        if (infoItr == sFormationMgr->CreatureGroupMap.end())
+            continue;
+
+        FormationInfo const& info = infoItr->second;
+        if (!info.HasGroupFlag(std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_RESPAWN_ON_EVADE)))
+            continue;
+
+        if (spawnId == m_groupID && info.HasGroupFlag(
+                std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_DONT_RESPAWN_LEADER_ON_EVADE)))
+            continue;
+
+        // Only creatures with a respawn still pending on this map: one without a stored time (alive, never loaded)
+        // is left alone, one already due (evade cascade of the same tick) is left to ProcessRespawns().
+        if (map->GetCreatureRespawnTime(spawnId) <= now)
+            continue;
+
+        map->SaveCreatureRespawnTime(spawnId, now);
     }
 }
 
@@ -331,7 +396,7 @@ void CreatureGroup::FormationReset(bool dismiss, bool initMotionMaster)
             if (initMotionMaster)
             {
                 if (dismiss)
-                    member->GetMotionMaster()->Initialize();
+                    member->GetMotionMaster()->MovementExpiredOnSlot(MOTION_SLOT_IDLE, false);
                 else
                     member->GetMotionMaster()->MoveIdle();
 
@@ -342,15 +407,10 @@ void CreatureGroup::FormationReset(bool dismiss, bool initMotionMaster)
     m_Formed = !dismiss;
 }
 
-void CreatureGroup::LeaderMoveTo(float x, float y, float z, uint32 move_type)
+void CreatureGroup::LeaderStartedMoving()
 {
-    //! To do: This should probably get its own movement generator or use WaypointMovementGenerator.
-    //! If the leader's path is known, member's path can be plotted as well using formation offsets.
     if (!m_leader)
         return;
-
-    float pathDist = m_leader->GetExactDist(x, y, z);
-    float pathAngle = std::atan2(m_leader->GetPositionY() - y, m_leader->GetPositionX() - x);
 
     for (auto const& itr : m_members)
     {
@@ -359,66 +419,64 @@ void CreatureGroup::LeaderMoveTo(float x, float y, float z, uint32 move_type)
         if (member == m_leader || !member->IsAlive() || member->GetVictim() || !pFormationInfo.HasGroupFlag(std::underlying_type_t<GroupAIFlags>(GroupAIFlags::GROUP_AI_FLAG_FOLLOW_LEADER)))
             continue;
 
-        // Xinef: If member is stunned / rooted etc don't allow to move him
-        if (member->HasUnitState(UNIT_STATE_NOT_MOVE))
+        if (member->HasUnitState(UNIT_STATE_NOT_MOVE) || member->isPossessed() || member->HasUnitFlag(UNIT_FLAG_PLAYER_CONTROLLED))
             continue;
 
-        // Xinef: this should be automatized, if turn angle is greater than PI/2 (90�) we should swap formation angle
-        float followAngle = pFormationInfo.follow_angle;
-        if (static_cast<float>(M_PI) - std::fabs(std::fabs(m_leader->GetOrientation() - pathAngle) - static_cast<float>(M_PI)) > static_cast<float>(M_PI)* 0.5f)
-        {
-            // pussywizard: in both cases should be 2*M_PI - follow_angle
-            // pussywizard: also, GetCurrentWaypointID() returns 0..n-1, while point_1 must be > 0, so +1
-            // pussywizard: db table waypoint_data shouldn't have point id 0 and shouldn't have any gaps for this to work!
-            // if (m_leader->GetCurrentWaypointID()+1 == pFormationInfo->point_1 || m_leader->GetCurrentWaypointID()+1 == itr->second->point_2)
-            followAngle = Position::NormalizeOrientation(pFormationInfo.follow_angle + static_cast<float>(M_PI)); //(2 * M_PI) - itr->second->follow_angle;
-        }
-
+        float const followAngle = pFormationInfo.follow_angle;
         float const followDist = pFormationInfo.follow_dist;
 
-        float dx = x + std::cos(followAngle + pathAngle) * followDist;
-        float dy = y + std::sin(followAngle + pathAngle) * followDist;
-        float dz = z;
+        if (!member->HasUnitState(UNIT_STATE_FOLLOW_MOVE))
+            member->GetMotionMaster()->MoveFormation(m_leader, followDist, followAngle, pFormationInfo.point_1, pFormationInfo.point_2);
+    }
+}
 
-        Acore::NormalizeMapCoord(dx);
-        Acore::NormalizeMapCoord(dy);
-        if (move_type < 2)
-            member->UpdateGroundPositionZ(dx, dy, dz);
+bool CreatureGroup::CanLeaderStartMoving() const
+{
+    for (auto const& itr : m_members)
+    {
+        if (itr.first && itr.first != m_leader && itr.first->IsAlive())
+            if (itr.first->IsEngaged() || itr.first->IsInEvadeMode())
+                return false;
+    }
 
-        // pussywizard: setting the same movementflags is not enough, spline decides whether leader walks/runs, so spline param is now passed as "run" parameter to this function
-        member->SetUnitMovementFlags(m_leader->GetUnitMovementFlags());
-        switch (move_type)
-        {
-        case WAYPOINT_MOVE_TYPE_WALK:
-            member->AddUnitMovementFlag(MOVEMENTFLAG_WALKING);
-            break;
-        case WAYPOINT_MOVE_TYPE_RUN:
-            member->RemoveUnitMovementFlag(MOVEMENTFLAG_WALKING);
-            break;
-        case WAYPOINT_MOVE_TYPE_LAND:
-            member->AddUnitMovementFlag(MOVEMENTFLAG_DISABLE_GRAVITY);
-            break;
-        }
+    return true;
+}
 
-        // xinef: if we move members to position without taking care of sizes, we should compare distance without sizes
-        // xinef: change members speed basing on distance - if too far speed up, if too close slow down
-        UnitMoveType const mtype = Movement::SelectSpeedType(member->GetUnitMovementFlags());
-        float const speedRate = m_leader->GetSpeedRate(mtype) * member->GetExactDist(dx, dy, dz) / pathDist;
+void CreatureGroup::RemoveFormationMovement()
+{
+    for (auto const& itr : m_members)
+    {
+        Creature* member = itr.first;
+        if (!member || member == m_leader)
+            continue;
 
-        if (speedRate > 0.01f) // don't move if speed rate is too low
-        {
-            member->SetSpeedRate(mtype, speedRate);
-            member->GetMotionMaster()->MovePoint(0, dx, dy, dz);
-            member->SetHomePosition(dx, dy, dz, pathAngle);
-        }
+        if (member->GetMotionMaster()->GetMotionSlotType(MOTION_SLOT_IDLE) == FORMATION_MOTION_TYPE)
+            member->GetMotionMaster()->MovementExpiredOnSlot(MOTION_SLOT_IDLE, false);
+    }
+}
+
+void CreatureGroup::DespawnFormation(Milliseconds timeToDespawn /*=0ms*/, Seconds forcedRespawnTimer /*=0s*/)
+{
+    // Copy the member list first: DespawnOrUnsummon() takes the member out of
+    // the world, which erases it from m_members and would invalidate this loop.
+    CreatureGroupMemberType members = m_members;
+
+    for (auto const& itr : members)
+    {
+        if (itr.first && itr.first->GetFormation() == this)
+            itr.first->DespawnOrUnsummon(timeToDespawn, forcedRespawnTimer);
     }
 }
 
 void CreatureGroup::RespawnFormation(bool force)
 {
-    for (auto const& itr : m_members)
+    // Copy the member list first: Respawn() takes the member out of the world,
+    // which erases it from m_members and would invalidate this loop.
+    CreatureGroupMemberType members = m_members;
+
+    for (auto const& itr : members)
     {
-        if (itr.first && !itr.first->IsAlive())
+        if (itr.first && itr.first->GetFormation() == this && !itr.first->IsAlive())
         {
             itr.first->Respawn(force);
         }

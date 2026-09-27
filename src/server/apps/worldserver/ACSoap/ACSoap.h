@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -20,10 +20,10 @@
 
 #include "Define.h"
 #include <future>
-#include <mutex>
+#include <memory>
 
 void process_message(struct soap* soap_message);
-void ACSoapThread(const std::string& host, uint16 port);
+void ACSoapThread(std::string const& host, uint16 port);
 
 class SOAPCommand
 {
@@ -59,6 +59,8 @@ public:
     bool m_success;
     std::string m_printBuffer;
     std::promise<void> finishedPromise;
+    // keep-alive while a queued command still references this object; released in commandFinished()
+    std::shared_ptr<SOAPCommand> m_self;
 };
 
 #endif

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -18,6 +18,7 @@
 #ifndef SCRIPT_OBJECT_GLOBAL_SCRIPT_H_
 #define SCRIPT_OBJECT_GLOBAL_SCRIPT_H_
 
+#include "DatabaseEnvFwd.h"
 #include "DBCEnums.h"
 #include "ObjectGuid.h"
 #include "ScriptObject.h"
@@ -36,6 +37,7 @@ enum GlobalHook
     GLOBALHOOK_ON_INITIALIZE_LOCKED_DUNGEONS,
     GLOBALHOOK_ON_AFTER_INITIALIZE_LOCKED_DUNGEONS,
     GLOBALHOOK_ON_BEFORE_UPDATE_ARENA_POINTS,
+    GLOBALHOOK_ON_ARENA_WEEK_RESET,
     GLOBALHOOK_ON_AFTER_UPDATE_ENCOUNTER_STATE,
     GLOBALHOOK_ON_BEFORE_WORLDOBJECT_SET_PHASEMASK,
     GLOBALHOOK_ON_IS_AFFECTED_BY_SPELL_MOD_CHECK,
@@ -46,6 +48,7 @@ enum GlobalHook
     GLOBALHOOK_ON_INSTANCEID_REMOVED,
     GLOBALHOOK_ON_BEFORE_SET_BOSS_STATE,
     GLOBALHOOK_AFTER_INSTANCE_GAME_OBJECT_CREATE,
+    GLOBALHOOK_CAN_CREATE_LFG_PROPOSAL,
     GLOBALHOOK_END
 };
 
@@ -53,7 +56,7 @@ enum GlobalHook
 class GlobalScript : public ScriptObject
 {
 protected:
-    GlobalScript(const char* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
+    GlobalScript(char const* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
 
 public:
     // items
@@ -71,6 +74,10 @@ public:
 
     // On Before arena points distribution
     virtual void OnBeforeUpdateArenaPoints(ArenaTeam* /*at*/, std::map<ObjectGuid, uint32>& /*ap*/) { }
+
+    // Called when the weekly arena point distribution has just reset the week statistics of every
+    // arena team on the realm.
+    virtual void OnArenaWeekReset() { }
 
     // Called when a dungeon encounter is updated.
     virtual void OnAfterUpdateEncounterState(Map* /*map*/, EncounterCreditType /*type*/,  uint32 /*creditEntry*/, Unit* /*source*/, Difficulty /*difficulty_fixed*/, std::list<DungeonEncounter const*> const* /*encounters*/, uint32 /*dungeonCompleted*/, bool /*updated*/) { }
@@ -101,6 +108,10 @@ public:
 
     // Called when a gameobject is created by an instance
     virtual void AfterInstanceGameObjectCreate(Map* /*instance*/, GameObject* /*go*/) { }
+
+    // Called before the LFG queue turns a compatible set of queued players and groups into a proposal.
+    // Return false to reject the combination.
+    [[nodiscard]] virtual bool CanCreateLfgProposal(lfg::Lfg5Guids const& /*guids*/) { return true; }
 };
 
 #endif

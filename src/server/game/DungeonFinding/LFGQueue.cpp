@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,9 +23,9 @@
 #include "InstanceScript.h"
 #include "LFGMgr.h"
 #include "Log.h"
-#include "ObjectDefines.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "ScriptMgr.h"
 #include "World.h"
 
 namespace lfg
@@ -195,7 +195,7 @@ namespace lfg
         return newGroupsProcessed;
     }
 
-    LfgCompatibility LFGQueue::FindNewGroups(const ObjectGuid& newGuid)
+    LfgCompatibility LFGQueue::FindNewGroups(ObjectGuid const& newGuid)
     {
         // each combination of dps+heal+tank (tank*8 + heal+4 + dps) has a value assigned 0..15
         // first 16 bits of the mask are for marking if such combination was found once, second 16 bits for marking second occurence of that combination, etc
@@ -244,7 +244,7 @@ namespace lfg
         return selfCompatibility;
     }
 
-    LfgCompatibility LFGQueue::CheckCompatibility(Lfg5Guids const& checkWith, const ObjectGuid& newGuid, uint64& foundMask, uint32& foundCount, const std::set<Lfg5Guids>& currentCompatibles)
+    LfgCompatibility LFGQueue::CheckCompatibility(Lfg5Guids const& checkWith, ObjectGuid const& newGuid, uint64& foundMask, uint32& foundCount, std::set<Lfg5Guids> const& currentCompatibles)
     {
         LOG_DEBUG("lfg", "CHECK CheckCompatibility: {}, new guid: {}", checkWith.toString(), newGuid.ToString());
         Lfg5Guids check(checkWith, false); // here newGuid is at front
@@ -304,7 +304,7 @@ namespace lfg
             //UpdateBestCompatibleInQueue(itQueue, strGuids);
             AddToCompatibles(strGuids);
             if (roleCheckResult && roleCheckResult <= 15)
-                foundMask |= ( (((uint64)1) << (roleCheckResult - 1)) | (((uint64)1) << (16 + roleCheckResult - 1)) | (((uint64)1) << (32 + roleCheckResult - 1)) | (((uint64)1) << (48 + roleCheckResult - 1)) );
+                foundMask |= ( (((uint64)1) << (roleCheckResult - 1)) | (((uint64)1) << (16 + roleCheckResult - 1)) | (((uint64)1) << (32 + roleCheckResult - 1)) | (((uint64)1) << (48 + roleCheckResult - 1)));
             return LFG_COMPATIBLES_WITH_LESS_PLAYERS;
         }
 
@@ -316,7 +316,7 @@ namespace lfg
         {
             for (uint8 i = 0; i < 5 && check.guids[i]; ++i)
             {
-                const LfgRolesMap& roles = QueueDataStore[check.guids[i]].roles;
+                LfgRolesMap const& roles = QueueDataStore[check.guids[i]].roles;
                 for (LfgRolesMap::const_iterator itRoles = roles.begin(); itRoles != roles.end(); ++itRoles)
                 {
                     LfgRolesMap::const_iterator itPlayer;
@@ -375,7 +375,7 @@ namespace lfg
                 LfgDungeonSet temporal;
                 LfgDungeonSet& dungeons = QueueDataStore[check.guids[i]].dungeons;
                 std::set_intersection(proposalDungeons.begin(), proposalDungeons.end(), dungeons.begin(), dungeons.end(), std::inserter(temporal, temporal.begin()));
-                proposalDungeons = temporal;
+                std::swap(proposalDungeons, temporal);
             }
 
             if (proposalDungeons.empty())
@@ -384,7 +384,7 @@ namespace lfg
         else
         {
             ObjectGuid gguid = check.front();
-            const LfgQueueData& queue = QueueDataStore[gguid];
+            LfgQueueData const& queue = QueueDataStore[gguid];
             proposalDungeons = queue.dungeons;
             proposalRoles = queue.roles;
             LFGMgr::CheckGroupRoles(proposalRoles);          // assing new roles
@@ -412,11 +412,17 @@ namespace lfg
         if (!sLFGMgr->AllQueued(check)) // can't create proposal
             return LFG_COMPATIBILITY_PENDING;
 
+        if (!sScriptMgr->CanCreateLfgProposal(proposal.queues))
+            return LFG_INCOMPATIBLES_REJECTED_BY_SCRIPT;
+
         // Create a new proposal
         proposal.cancelTime = GameTime::GetGameTime().count() + LFG_TIME_PROPOSAL;
         proposal.state = LFG_PROPOSAL_INITIATING;
         proposal.leader.Clear();
-        proposal.dungeonId = Acore::Containers::SelectRandomContainerElement(proposalDungeons);
+
+        // Filter out recently completed dungeons to prevent same dungeon in a row
+        LfgDungeonSet filteredDungeons = sLFGMgr->FilterCooldownDungeons(proposalDungeons, proposalRoles);
+        proposal.dungeonId = Acore::Containers::SelectRandomContainerElement(filteredDungeons);
 
         uint32 completedEncounters = 0;
         bool leader = false;
@@ -569,6 +575,15 @@ namespace lfg
 
     time_t LFGQueue::GetJoinTime(ObjectGuid guid)
     {
+        //npcbot: do no incur side effect
+        if (guid.IsCreature())
+        {
+            auto itr = QueueDataStore.find(guid);
+            if (itr != QueueDataStore.end())
+                return itr->second.joinTime;
+            return 0;
+        }
+        //end npcbot
         return QueueDataStore[guid].joinTime;
     }
 

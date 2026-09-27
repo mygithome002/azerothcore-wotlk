@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -37,7 +37,7 @@ template<typename T, class S> struct Finder
     T S::* idMember_;
 
     Finder(T val, T S::* idMember) : val_(val), idMember_(idMember) {}
-    bool operator()(const std::pair<int, S>& obj) { return obj.second.*idMember_ == val_; }
+    bool operator()(std::pair<int, S> const& obj) { return obj.second.*idMember_ == val_; }
 };
 
 void stripLineInvisibleChars(std::string& src);
@@ -45,16 +45,7 @@ void stripLineInvisibleChars(std::string& src);
 AC_COMMON_API Optional<int32> MoneyStringToMoney(std::string_view moneyString);
 
 std::string secsToTimeString(uint64 timeInSecs, bool shortText = false);
-uint32 TimeStringToSecs(const std::string& timestring);
-
-inline void ApplyPercentModFloatVar(float& var, float val, bool apply)
-{
-    if (val == -100.0f)     // prevent set var to zero
-    {
-        val = -99.99f;
-    }
-    var *= (apply ? (100.0f + val) / 100.0f : 100.0f / (100.0f + val));
-}
+uint32 TimeStringToSecs(std::string const& timestring);
 
 // Percentage calculation
 template <class T, class U>
@@ -362,13 +353,13 @@ std::wstring GetMainPartOfName(std::wstring const& wname, uint32 declension);
 AC_COMMON_API bool utf8ToConsole(std::string_view utf8str, std::string& conStr);
 AC_COMMON_API bool consoleToUtf8(std::string_view conStr, std::string& utf8str);
 AC_COMMON_API bool Utf8FitTo(std::string_view str, std::wstring_view search);
-AC_COMMON_API void utf8printf(FILE* out, const char* str, ...);
-AC_COMMON_API void vutf8printf(FILE* out, const char* str, va_list* ap);
+AC_COMMON_API void utf8printf(FILE* out, char const* str, ...);
+AC_COMMON_API void vutf8printf(FILE* out, char const* str, va_list* ap);
 AC_COMMON_API bool Utf8ToUpperOnlyLatin(std::string& utf8String);
 
 bool IsIPAddress(char const* ipaddress);
 
-uint32 CreatePIDFile(const std::string& filename);
+uint32 CreatePIDFile(std::string const& filename);
 uint32 GetPID();
 
 namespace Acore::Impl
@@ -515,7 +506,7 @@ public:
         part[2] = right.part[2];
         return *this;
     }
-    flag96(const flag96&) = default;
+    flag96(flag96 const&) = default;
     flag96(flag96&&) = default;
 
     inline flag96 operator&(flag96 const& right) const

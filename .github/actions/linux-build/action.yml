@@ -26,21 +26,46 @@ inputs:
     description: Flag to enable or disable PCH
     required: false
     type: boolean
+  maxerrors:
+    default: 1
+    description: Max allowed error count before compilation stops
+    required: false
+    type: number
+  keepgoing:
+    default: false
+    description: Flag to continue build after errors
+    required: false
+    type: boolean
+  extra-data-dir:
+    default: ''
+    description: >-
+      Folder laid out like the server data dir (dbc/, maps/, ...), copied over the client data
+      before the dry run
+    required: false
+    type: string
 runs:
   using: composite
   steps:
+    - name: echo cache key
+      shell: bash
+      run: echo "Cache key -> ccache:${{ runner.os }}:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}:pch=${{ inputs.pch }}:${{ github.ref_name }}-${{ github.run_id }}"
+
+    # The primary key is unique per run (`-${{ github.run_id }}`) so every run
+    # saves a fresh cache. A static key would hit on itself on the second run
+    # and `actions/cache` would then skip the upload, freezing the cache after
+    # the first commit on a branch (and permanently on master). The restore-keys
+    # walk back from the most-recent cache on this branch to progressively
+    # broader fallbacks (branch -> pch variant -> modules variant -> compiler).
     - name: Cache
-      uses: actions/cache@v4
-      if: inputs.pch != 'true'
+      uses: actions/cache@v6
       with:
         path: ${{ github.workspace }}/var/ccache
-          # format
-          # ccache:OS:CC_CXX:MODULES:GITHUB_REF:GITHUB_SHA
-        key: ccache:ubuntu-latest:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}:${{ github.ref }}:${{ github.sha }}
+        key: ccache:${{ runner.os }}:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}:pch=${{ inputs.pch }}:${{ github.ref_name }}-${{ github.run_id }}
         restore-keys: |
-          ccache:ubuntu-latest:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}:${{ github.ref }}
-          ccache:ubuntu-latest:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}
-          ccache:ubuntu-latest:${{ inputs.CC }}_${{ inputs.CXX }}
+          ccache:${{ runner.os }}:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}:pch=${{ inputs.pch }}:${{ github.ref_name }}-
+          ccache:${{ runner.os }}:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}:pch=${{ inputs.pch }}
+          ccache:${{ runner.os }}:${{ inputs.CC }}_${{ inputs.CXX }}:${{ inputs.modules }}
+          ccache:${{ runner.os }}:${{ inputs.CC }}_${{ inputs.CXX }}
 
     # This script moves sql files from "data/sql/updates/pending_$DB" to the
     # proper folder for the db
@@ -53,42 +78,62 @@ runs:
       run: |
         sudo apt update
         sudo apt remove needrestart #refer: https://github.com/actions/runner-images/issues/9937
-        sudo apt-get -y install ccache clang cmake curl google-perftools \
-          libmysqlclient-dev make unzip build-essential cmake-data  \
-          libboost-all-dev libbz2-dev libncurses5-dev libmysql++-dev \
+        sudo apt-get -y install ccache clang cmake curl \
+          make unzip build-essential cmake-data  \
+          libboost-all-dev libbz2-dev libmysql++-dev \
           libreadline6-dev libssl-dev libtool openssl zlib1g-dev
-
-        # Account for https://github.com/actions/runner-images/issues/8659
-        # based off of https://github.com/actions/runner-images/issues/8659#issuecomment-1852353116
-        UBUNTU_VERSION="$(grep VERSION_ID /etc/os-release | cut -f2 -d\")"
-        source /etc/os-release
-        if [[ "$VERSION_CODENAME" == "jammy" ]]; then
-          if [[ "${{ inputs.cc }}" =~ "clang-" ]]; then
-            CLANG_VERSION="$(echo '${{ inputs.cc }}' | cut -f2 -d\-)"
-            wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-            sudo add-apt-repository "deb http://apt.llvm.org/$VERSION_CODENAME/ llvm-toolchain-$VERSION_CODENAME-$CLANG_VERSION main"
-            sudo apt-get -qq update
-            sudo apt-get -qq install '${{ inputs.cc }}'
-          fi
+        if [[ "$(lsb_release -sr)" == "26.04" ]]; then
+          # libstdc++-16-dev: clang 21 links against the GCC 16 toolchain, the
+          # default g++ (GCC 15) only brings the GCC 15 C++ dev files
+          sudo apt-get -y install libgoogle-perftools-dev default-libmysqlclient-dev libstdc++-16-dev
+        else
+          sudo apt-get -y install google-perftools libmysqlclient-dev libncurses5-dev
         fi
 
     - name: setup ccache
       shell: bash
       env:
         CCACHE_DIR: $GITHUB_WORKSPACE/var/ccache
+      # CCACHE_COMPRESSLEVEL=3: level 9 burns CPU for marginal size gains on a
+      # cache that never approaches max_size.
       run: |
-        cat <<EOF >> $GITHUB_ENV
+        mkdir -p "$CCACHE_DIR"
+        cat <<EOF >> "$GITHUB_ENV"
+        CCACHE_BASEDIR=${GITHUB_WORKSPACE}
         CCACHE_DIR=${{ env.CCACHE_DIR }}
-        CCACHE_MAXSIZE=1000MB
+        CCACHE_HASHDIR=1
+        CCACHE_MAXSIZE=5G
         CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime
-        CCACHE_CPP2=true
         CCACHE_COMPRESS=1
-        CCACHE_COMPRESSLEVEL=9
+        CCACHE_COMPRESSLEVEL=3
         CCACHE_COMPILERCHECK=content
-        CCACHE_LOGFILE=$CCACHE_DIR/cache.debug
+        CCACHE_LOGFILE=${{ env.CCACHE_DIR }}/cache.debug
         CC=${{ inputs.CC }}
         CXX=${{ inputs.CXX }}
         EOF
+
+    - name: ccache config snapshot
+      shell: bash
+      run: |
+        echo "==== Effective ccache configuration ===="
+        ccache -p | egrep 'base_dir|hash_dir|compiler_check|sloppiness|max_size' || true
+
+        echo
+        echo "==== Compiler info ===="
+        which ${{ inputs.CC }} && ${{ inputs.CC }} --version || true
+        which ${{ inputs.CXX }} && ${{ inputs.CXX }} --version || true
+
+        echo
+        echo "==== Previous cache stats ===="
+        ccache -s || true
+
+        echo
+        echo "==== Top cache results ===="
+        grep -o 'result: .*' "$CCACHE_DIR/cache.debug" 2>/dev/null | sort | uniq -c | sort -nr | head || true
+
+    - name: reset ccache stats
+      shell: bash
+      run: ccache -z || true
 
     - name: Configure
       shell: bash
@@ -97,6 +142,8 @@ runs:
         mkdir build
         cd build
         cmake "$GITHUB_WORKSPACE" \
+          -DCMAKE_C_COMPILER="${{ inputs.CC }}" \
+          -DCMAKE_CXX_COMPILER="${{ inputs.CXX }}" \
           -DCMAKE_INSTALL_PREFIX="$GITHUB_WORKSPACE/env/dist" \
           -DAPPS_BUILD="all" \
           -DTOOLS_BUILD=${{ inputs.tools }} \
@@ -106,8 +153,8 @@ runs:
           -DCMAKE_BUILD_TYPE="Release" \
           -DCMAKE_CXX_COMPILER_LAUNCHER="ccache" \
           -DCMAKE_C_COMPILER_LAUNCHER="ccache" \
-          -DCMAKE_C_FLAGS="-Werror" \
-          -DCMAKE_CXX_FLAGS="-Werror" \
+          -DCMAKE_C_FLAGS="-Werror ${{ startsWith(inputs.CC, 'clang') && '-ferror-limit=' || '-fmax-errors=' }}${{inputs.maxerrors}} -fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
+          -DCMAKE_CXX_FLAGS="-Werror ${{ startsWith(inputs.CXX, 'clang') && '-ferror-limit=' || '-fmax-errors=' }}${{inputs.maxerrors}} -fdebug-prefix-map=${GITHUB_WORKSPACE}=." \
           -DBUILD_TESTING="ON" \
           -DUSE_SCRIPTPCH=${{ inputs.pch == 'true' && 'ON' || '' }} \
           -DUSE_COREPCH=${{ inputs.pch == 'true' && 'ON' || '' }} \
@@ -116,7 +163,9 @@ runs:
     - name: build
       shell: bash
       working-directory: "${{ github.workspace }}/build"
-      run: cmake --build . --config "Release" -j "$(($(nproc) + 2))"
+      run: |
+        # '--' passes '--keep-going' to the underlying build system (make)
+        cmake --build . --config "Release" -j "$(($(nproc) + 2))" ${{ inputs.keepgoing == 'true' && '-- --keep-going' || '' }}
 
     - name: install
       shell: bash
@@ -144,6 +193,21 @@ runs:
       shell: bash
       run: |
         git clone --depth 1 --branch master --single-branch https://github.com/ac-data/ac-data.git "$AC_DATA_DIR"
+
+    - name: Copy extra data files
+      if: inputs.extra-data-dir != ''
+      shell: bash
+      env:
+        EXTRA_DATA_DIR: ${{ inputs.extra-data-dir }}
+      run: |
+        if [[ ! -d "$EXTRA_DATA_DIR" ]]; then
+          echo "extra-data-dir '$EXTRA_DATA_DIR' is not a directory"
+          exit 1
+        fi
+        cp -r "$EXTRA_DATA_DIR/." "$AC_DATA_DIR/"
+        for dir in "$EXTRA_DATA_DIR"/*/; do
+          echo "$(basename "$dir"): $(find "$dir" -type f | wc -l) files"
+        done
 
     - name: Start MySQL container
       shell: bash
@@ -173,8 +237,12 @@ runs:
     - name: Run unit tests
       shell: bash
       run: |
-        if [[ -f build/obj/src/test/unit_tests ]]; then
-          build/obj/src/test/unit_tests
+        if [[ -f build/src/test/unit_tests ]]; then
+          build/src/test/unit_tests
         else
           exit 0
         fi
+
+    - name: ccache stats
+      shell: bash
+      run: ccache -s || true

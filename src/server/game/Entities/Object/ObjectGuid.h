@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -26,6 +26,9 @@
 #include <set>
 #include <unordered_set>
 #include <vector>
+
+// Realm id packed into bits 32-47 of a player ObjectGuid; 0 means local / non-crossrealm.
+constexpr uint16 DEFAULT_NON_CROSSREALM_REALM_ID = 0;
 
 enum TypeID
 {
@@ -142,6 +145,7 @@ class ObjectGuid
         [[nodiscard]] uint64   GetRawValue() const { return _guid; }
         [[nodiscard]] HighGuid GetHigh() const { return HighGuid((_guid >> 48) & 0x0000FFFF); }
         [[nodiscard]] uint32   GetEntry() const { return HasEntry() ? uint32((_guid >> 24) & UI64LIT(0x0000000000FFFFFF)) : 0; }
+        [[nodiscard]] uint16   GetRealmID() const { return IsPlayer() ? uint16((_guid >> 32) & UI64LIT(0xFFFF)) : 0; }
         [[nodiscard]] LowType  GetCounter()  const
         {
             return HasEntry()
@@ -269,7 +273,7 @@ class PackedGuid
         explicit PackedGuid(ObjectGuid guid) : _packedGuid(PACKED_GUID_MIN_BUFFER_SIZE) { _packedGuid.appendPackGUID(guid.GetRawValue()); }
 
         void Set(uint64 guid) { _packedGuid.wpos(0); _packedGuid.appendPackGUID(guid); }
-        void Set(ObjectGuid guid) { _packedGuid.wpos(0); _packedGuid.appendPackGUID(guid.GetRawValue()); }
+        void Set(ObjectGuid const& guid) { _packedGuid.wpos(0); _packedGuid.appendPackGUID(guid.GetRawValue()); }
 
         [[nodiscard]] std::size_t size() const { return _packedGuid.size(); }
 
@@ -283,12 +287,13 @@ public:
     ObjectGuidGeneratorBase(ObjectGuid::LowType start = 1) : _nextGuid(start) { }
 
     virtual void Set(ObjectGuid::LowType val) { _nextGuid = val; }
-    virtual ObjectGuid::LowType Generate() = 0;
+    virtual ObjectGuid::LowType Generate(uint16 realmId = DEFAULT_NON_CROSSREALM_REALM_ID) = 0;
     [[nodiscard]] ObjectGuid::LowType GetNextAfterMaxUsed() const { return _nextGuid; }
     virtual ~ObjectGuidGeneratorBase() = default;
 
 protected:
     static void HandleCounterOverflow(HighGuid high);
+    static bool GetClusterGuid(HighGuid high, uint16 realmId, ObjectGuid::LowType& clusterGuid);
     ObjectGuid::LowType _nextGuid;
 };
 
@@ -298,8 +303,12 @@ class ObjectGuidGenerator : public ObjectGuidGeneratorBase
 public:
     explicit ObjectGuidGenerator(ObjectGuid::LowType start = 1) : ObjectGuidGeneratorBase(start) { }
 
-    ObjectGuid::LowType Generate() override
+    ObjectGuid::LowType Generate(uint16 realmId = DEFAULT_NON_CROSSREALM_REALM_ID) override
     {
+        ObjectGuid::LowType clusterGuid = 0;
+        if (GetClusterGuid(high, realmId, clusterGuid))
+            return clusterGuid;
+
         if (_nextGuid >= ObjectGuid::GetMaxCounter(high) - 1)
             HandleCounterOverflow(high);
 

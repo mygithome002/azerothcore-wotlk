@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -32,6 +32,7 @@ enum WorldDatabaseStatements : uint32
     WORLD_DEL_CRELINKED_RESPAWN,
     WORLD_REP_CREATURE_LINKED_RESPAWN,
     WORLD_SEL_CREATURE_TEXT,
+    WORLD_SEL_CREATURE_TEXT_OPTIONS,
     WORLD_SEL_SMART_SCRIPTS,
     WORLD_SEL_SMARTAI_WP,
     WORLD_DEL_GAMEOBJECT,
@@ -81,6 +82,7 @@ enum WorldDatabaseStatements : uint32
     WORLD_UPD_WAYPOINT_SCRIPT_O,
     WORLD_SEL_WAYPOINT_SCRIPT_ID_BY_GUID,
     WORLD_DEL_CREATURE,
+    WORLD_DEL_CREATURE_MULTISPAWN,
     WORLD_SEL_COMMANDS,
     WORLD_SEL_CREATURE_TEMPLATE,
     WORLD_SEL_WAYPOINT_SCRIPT_BY_ID,
@@ -90,8 +92,23 @@ enum WorldDatabaseStatements : uint32
     WORLD_SEL_CREATURE_NEAREST,
     WORLD_SEL_GAMEOBJECT_TARGET,
     WORLD_INS_CREATURE,
+    WORLD_SEL_GAME_EVENTS,
+    WORLD_SEL_GAME_EVENT_PREREQUISITE_DATA,
+    WORLD_SEL_GAME_EVENT_CREATURE_DATA,
+    WORLD_SEL_GAME_EVENT_GAMEOBJECT_DATA,
+    WORLD_SEL_GAME_EVENT_MODEL_EQUIPMENT_DATA,
+    WORLD_SEL_GAME_EVENT_QUEST_DATA,
+    WORLD_SEL_GAME_EVENT_GAMEOBJECT_QUEST_DATA,
+    WORLD_SEL_GAME_EVENT_QUEST_CONDITION_DATA,
+    WORLD_SEL_GAME_EVENT_CONDITION_DATA,
+    WORLD_SEL_GAME_EVENT_NPC_FLAGS,
+    WORLD_SEL_GAME_EVENT_QUEST_SEASONAL_RELATIONS,
+    WORLD_SEL_GAME_EVENT_BATTLEGROUND_DATA,
+    WORLD_SEL_GAME_EVENT_POOL_DATA,
+    WORLD_SEL_GAME_EVENT_ARENA_SEASON,
     WORLD_DEL_GAME_EVENT_CREATURE,
     WORLD_DEL_GAME_EVENT_MODEL_EQUIP,
+    WORLD_SEL_GAME_EVENT_NPC_VENDOR,
     WORLD_INS_GAMEOBJECT,
     WORLD_SEL_DISABLES,
     WORLD_INS_DISABLES,
@@ -100,6 +117,13 @@ enum WorldDatabaseStatements : uint32
     WORLD_UPD_GAMEOBJECT_ZONE_AREA_DATA,
     WORLD_SEL_REQ_XP,
     WORLD_INS_GAMEOBJECT_ADDON,
+    WORLD_UPD_VERSION,
+    WORLD_DEL_SPAWNGROUP_MEMBER,
+
+    //npcbot
+    WORLD_UPD_NPCBOT_NAME,
+    WORLD_REP_NPCBOT_APPEARANCE,
+    //end npcbot
 
     MAX_WORLDDATABASE_STATEMENTS
 };

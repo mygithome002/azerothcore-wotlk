@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,20 +22,6 @@
 #include "ScriptedGossip.h"
 #include "SpellScript.h"
 #include "SpellScriptLoader.h"
-/* ScriptData
-SDName: Thousand Needles
-SD%Complete: 100
-SDComment: Support for Quest: 1950, 4770, 4904, 4966, 5151.
-SDCategory: Thousand Needles
-EndScriptData */
-
-/* ContentData
-npc_lakota_windsong
-npc_swiftmountain
-npc_plucky
-npc_enraged_panther
-go_panther_cage
-EndContentData */
 
 /*######
 # npc_lakota_windsong
@@ -72,7 +58,7 @@ class npc_lakota_windsong : public CreatureScript
 public:
     npc_lakota_windsong() : CreatureScript("npc_lakota_windsong") { }
 
-    bool OnQuestAccept(Player* player, Creature* creature, const Quest* quest) override
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest) override
     {
         if (quest->GetQuestId() == QUEST_FREE_AT_LAST)
         {
@@ -80,7 +66,10 @@ public:
             creature->SetFaction(FACTION_ESCORTEE_H_NEUTRAL_ACTIVE); //guessed
 
             if (npc_lakota_windsongAI* pEscortAI = CAST_AI(npc_lakota_windsong::npc_lakota_windsongAI, creature->AI()))
-                pEscortAI->Start(false, false, player->GetGUID(), quest);
+            {
+                creature->SetWalk(true);
+                pEscortAI->Start(false, player->GetGUID(), quest);
+            }
         }
         return true;
     }
@@ -96,6 +85,7 @@ public:
 
         void Reset() override { }
 
+        using CreatureAI::WaypointReached;
         void WaypointReached(uint32 waypointId) override
         {
             switch (waypointId)
@@ -154,7 +144,7 @@ class npc_paoka_swiftmountain : public CreatureScript
 public:
     npc_paoka_swiftmountain() : CreatureScript("npc_paoka_swiftmountain") { }
 
-    bool OnQuestAccept(Player* player, Creature* creature, const Quest* quest) override
+    bool OnQuestAccept(Player* player, Creature* creature, Quest const* quest) override
     {
         if (quest->GetQuestId() == QUEST_HOMEWARD)
         {
@@ -162,7 +152,10 @@ public:
             creature->SetFaction(FACTION_ESCORTEE_H_NEUTRAL_ACTIVE); // guessed
 
             if (npc_paoka_swiftmountainAI* pEscortAI = CAST_AI(npc_paoka_swiftmountain::npc_paoka_swiftmountainAI, creature->AI()))
-                pEscortAI->Start(false, false, player->GetGUID(), quest);
+            {
+                creature->SetWalk(true);
+                pEscortAI->Start(false, player->GetGUID(), quest);
+            }
         }
         return true;
     }
@@ -178,6 +171,7 @@ public:
 
         void Reset() override { }
 
+        using CreatureAI::WaypointReached;
         void WaypointReached(uint32 waypointId) override
         {
             switch (waypointId)
@@ -208,13 +202,14 @@ public:
 # npc_plucky
 ######*/
 
-#define GOSSIP_P    "Please tell me the Phrase.."
-
 enum Plucky
 {
     QUEST_SCOOP             = 1950,
     SPELL_PLUCKY_HUMAN      = 9192,
-    SPELL_PLUCKY_CHICKEN    = 9220
+    SPELL_PLUCKY_CHICKEN    = 9220,
+
+    GOSSIP_MENU_PLUCKY      = 6626,
+    GOSSIP_OPTION_PHRASE    = 0
 };
 
 class npc_plucky : public CreatureScript
@@ -238,7 +233,7 @@ public:
     bool OnGossipHello(Player* player, Creature* creature) override
     {
         if (player->GetQuestStatus(QUEST_SCOOP) == QUEST_STATUS_INCOMPLETE)
-            AddGossipItemFor(player, GOSSIP_ICON_CHAT, GOSSIP_P, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
+            AddGossipItemFor(player, GOSSIP_MENU_PLUCKY, GOSSIP_OPTION_PHRASE, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF + 1);
 
         SendGossipMenuFor(player, 738, creature->GetGUID());
 

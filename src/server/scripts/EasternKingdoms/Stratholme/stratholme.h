@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -30,6 +30,7 @@ enum DataTypes
     TYPE_BARON_FIGHT                    = 4,
     TYPE_MALLOW                         = 5,
     TYPE_BARTHILAS_RUN                  = 6,
+    DATA_SCARLET_THREAD_LOOTED          = 7,
 
     DATA_BARON_RUN_NONE                 = 0,
     DATA_BARON_RUN_GATE                 = 1,
@@ -81,6 +82,8 @@ enum GameobjectIds
 
 enum MiscIds
 {
+    ITEM_ENCHANTED_SCARLET_THREAD       = 12734,
+
     SAY_BLACK_GUARD_INIT                = 0,
     SAY_BARON_INIT_YELL                 = 0,
     SAY_BRAON_ZIGGURAT_FALL_YELL        = 1,

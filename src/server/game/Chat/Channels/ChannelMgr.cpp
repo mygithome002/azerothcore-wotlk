@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -74,7 +74,7 @@ void ChannelMgr::LoadChannels()
         if (!Utf8toWStr(channelName, channelWName))
         {
             LOG_ERROR("server.loading", "Failed to load channel '{}' from database - invalid utf8 sequence? Deleted.", channelName);
-            toDelete.push_back({ channelName, team });
+            toDelete.emplace_back(channelName, team);
             continue;
         }
 
@@ -82,7 +82,7 @@ void ChannelMgr::LoadChannels()
         if (!mgr)
         {
             LOG_ERROR("server.loading", "Failed to load custom chat channel '{}' from database - invalid team {}. Deleted.", channelName, team);
-            toDelete.push_back({ channelName, team });
+            toDelete.emplace_back(channelName, team);
             continue;
         }
 
@@ -150,7 +150,7 @@ Channel* ChannelMgr::GetChannel(std::string const& name, Player* player, bool pk
         {
             WorldPacket data;
             MakeNotOnPacket(&data, name);
-            player->GetSession()->SendPacket(&data);
+            player->SendDirectMessage(&data);
         }
 
         return nullptr;
@@ -205,7 +205,7 @@ void ChannelMgr::LoadChannelRights()
     LOG_INFO("server.loading", " ");
 }
 
-const ChannelRights& ChannelMgr::GetChannelRightsFor(const std::string& name)
+ChannelRights const& ChannelMgr::GetChannelRightsFor(std::string const& name)
 {
     std::string nameStr = name;
     std::transform(nameStr.begin(), nameStr.end(), nameStr.begin(), ::tolower);
@@ -215,7 +215,7 @@ const ChannelRights& ChannelMgr::GetChannelRightsFor(const std::string& name)
     return channelRightsEmpty;
 }
 
-void ChannelMgr::SetChannelRightsFor(const std::string& name, const uint32& flags, const uint32& speakDelay, const std::string& joinmessage, const std::string& speakmessage, const std::set<uint32>& moderators)
+void ChannelMgr::SetChannelRightsFor(std::string const& name, uint32 const& flags, uint32 const& speakDelay, std::string const& joinmessage, std::string const& speakmessage, std::set<uint32> const& moderators)
 {
     std::string nameStr = name;
     std::transform(nameStr.begin(), nameStr.end(), nameStr.begin(), ::tolower);

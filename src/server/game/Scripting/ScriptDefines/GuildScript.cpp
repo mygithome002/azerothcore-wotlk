@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -29,17 +29,17 @@ void ScriptMgr::OnGuildRemoveMember(Guild* guild, Player* player, bool isDisband
     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_REMOVE_MEMBER, script->OnRemoveMember(guild, player, isDisbanding, isKicked));
 }
 
-void ScriptMgr::OnGuildMOTDChanged(Guild* guild, const std::string& newMotd)
+void ScriptMgr::OnGuildMOTDChanged(Guild* guild, std::string const& newMotd)
 {
     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_MOTD_CHANGED, script->OnMOTDChanged(guild, newMotd));
 }
 
-void ScriptMgr::OnGuildInfoChanged(Guild* guild, const std::string& newInfo)
+void ScriptMgr::OnGuildInfoChanged(Guild* guild, std::string const& newInfo)
 {
     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_INFO_CHANGED, script->OnInfoChanged(guild, newInfo));
 }
 
-void ScriptMgr::OnGuildCreate(Guild* guild, Player* leader, const std::string& name)
+void ScriptMgr::OnGuildCreate(Guild* guild, Player* leader, std::string const& name)
 {
     CALL_ENABLED_HOOKS(GuildScript, GUILDHOOK_ON_CREATE, script->OnCreate(guild, leader, name));
 }
@@ -79,7 +79,7 @@ bool ScriptMgr::CanGuildSendBankList(Guild const* guild, WorldSession* session, 
     CALL_ENABLED_BOOLEAN_HOOKS(GuildScript, GUILDHOOK_CAN_GUILD_SEND_BANK_LIST, !script->CanGuildSendBankList(guild, session, tabId, sendAllSlots));
 }
 
-GuildScript::GuildScript(const char* name, std::vector<uint16> enabledHooks)
+GuildScript::GuildScript(char const* name, std::vector<uint16> enabledHooks)
     : ScriptObject(name, GUILDHOOK_END)
 {
     // If empty - enable all available hooks.

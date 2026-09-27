@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -16,6 +16,7 @@
  */
 
 #include "Vehicle.h"
+#include "AreaDefines.h"
 #include "BattlefieldWG.h"
 #include "Log.h"
 #include "MoveSplineInit.h"
@@ -25,28 +26,38 @@
 #include "TemporarySummon.h"
 #include "Unit.h"
 #include "Util.h"
+#include <algorithm>
 
 //npcbot
 #include "botmgr.h"
 //end npcbot
 
+enum PowerDisplayIds
+{
+    POWER_DISPLAY_PYRITE = 41
+};
+
 Vehicle::Vehicle(Unit* unit, VehicleEntry const* vehInfo, uint32 creatureEntry) :
-    _me(unit), _vehicleInfo(vehInfo), _usableSeatNum(0), _creatureEntry(creatureEntry), _status(STATUS_NONE)
+    _me(unit), _vehicleInfo(vehInfo), _usableSeatNum(0), _creatureEntry(creatureEntry), _status(STATUS_NONE),
+    _accessoriesInstalled(false)
 {
     for (uint32 i = 0; i < MAX_VEHICLE_SEATS; ++i)
     {
         if (uint32 seatId = _vehicleInfo->m_seatID[i])
             if (VehicleSeatEntry const* veSeat = sVehicleSeatStore.LookupEntry(seatId))
             {
-                Seats.insert(std::make_pair(i, VehicleSeat(veSeat)));
+                VehicleSeatAddon const* addon = sObjectMgr->GetVehicleSeatAddon(seatId);
+                Seats.insert(std::make_pair(i, VehicleSeat(veSeat, addon)));
                 if (veSeat->CanEnterOrExit())
                     ++_usableSeatNum;
             }
     }
 
-    // Ulduar demolisher
-    if (vehInfo->m_ID == 338)
-        ++_usableSeatNum;
+    // Set or remove correct flags based on available seats. Will overwrite db data (if wrong).
+    if (_usableSeatNum)
+        _me->SetNpcFlag((_me->IsPlayer() ? UNIT_NPC_FLAG_PLAYER_VEHICLE : UNIT_NPC_FLAG_SPELLCLICK));
+    else
+        _me->RemoveNpcFlag((_me->IsPlayer() ? UNIT_NPC_FLAG_PLAYER_VEHICLE : UNIT_NPC_FLAG_SPELLCLICK));
 
     InitMovementInfoForBase();
 }
@@ -74,7 +85,14 @@ void Vehicle::Install()
     if (_me->IsCreature())
     {
         if (PowerDisplayEntry const* powerDisplay = sPowerDisplayStore.LookupEntry(_vehicleInfo->m_powerDisplayId))
+        {
             _me->setPowerType(Powers(powerDisplay->PowerType));
+
+            // Pyrite does not regenerate and is only refilled by scripted energizes,
+            // so the Salvaged Demolisher and its Mechanic Seat spawn with a full bar
+            if (_vehicleInfo->m_powerDisplayId == POWER_DISPLAY_PYRITE)
+                _me->SetPower(_me->getPowerType(), _me->GetMaxPower(_me->getPowerType()));
+        }
         else if (_me->IsClass(CLASS_ROGUE, CLASS_CONTEXT_ABILITY))
             _me->setPowerType(POWER_ENERGY);
     }
@@ -86,8 +104,16 @@ void Vehicle::Install()
 
 void Vehicle::InstallAllAccessories(bool evading)
 {
-    if (GetBase()->IsPlayer() || !evading)
-        RemoveAllPassengers();   // We might have aura's saved in the DB with now invalid casters - remove
+    // Clear stale control-vehicle auras only on the first non-evade reset;
+    // a re-Reset would otherwise eject a just-seated passenger and, for
+    // accessories, fire a spurious SMART_EVENT_PASSENGER_REMOVED.
+    if (GetBase()->IsPlayer() || (!evading && !_accessoriesInstalled))
+        RemoveAllPassengers();
+
+    // Mark the initial reset as done even if this vehicle has no accessory
+    // list, so subsequent Resets don't eject passengers on vehicles without
+    // accessories (e.g. WG demolisher/catapult).
+    _accessoriesInstalled = true;
 
     VehicleAccessoryList const* accessories = sObjectMgr->GetVehicleAccessoryList(this);
     if (!accessories)
@@ -110,6 +136,7 @@ void Vehicle::Uninstall()
     _status = STATUS_UNINSTALLING;
     LOG_DEBUG("vehicles", "Vehicle::Uninstall {}", _me->GetGUID().ToString());
     RemoveAllPassengers();
+    _accessoriesInstalled = false;
 
     if (_me && _me->IsCreature())
     {
@@ -128,7 +155,9 @@ void Vehicle::Reset(bool evading /*= false*/)
     else
     {
         ApplyAllImmunities();
-        InstallAllAccessories(evading);
+        // Dead spawns waiting out a respawn timer must not seat live accessories; they are seated on revival.
+        if (_me->IsAlive())
+            InstallAllAccessories(evading);
         if (_usableSeatNum)
             _me->SetNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
     }
@@ -160,7 +189,7 @@ void Vehicle::ApplyAllImmunities()
         //_me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_MOD_UNATTACKABLE, true);
         _me->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_SHIELD, true);
         _me->ApplySpellImmune(0, IMMUNITY_MECHANIC, MECHANIC_IMMUNE_SHIELD, true);
-        if (_me->GetZoneId() == BATTLEFIELD_WG_ZONEID || _me->ToCreature()->GetSpawnId() || (_me->FindMap() && _me->FindMap()->Instanceable()))
+        if (_me->GetZoneId() == AREA_WINTERGRASP || _me->ToCreature()->GetSpawnId() || (_me->FindMap() && _me->FindMap()->Instanceable()))
             _me->ApplySpellImmune(0, IMMUNITY_STATE, SPELL_AURA_SCHOOL_ABSORB, true);
 
         // ... Resistance, Split damage, Change stats ...
@@ -234,6 +263,15 @@ Unit* Vehicle::GetPassenger(int8 seatId) const
     return ObjectAccessor::GetUnit(*GetBase(), seat->second.Passenger.Guid);
 }
 
+VehicleSeatAddon const* Vehicle::GetSeatAddonForSeatOfPassenger(Unit const* passenger) const
+{
+    for (SeatMap::const_iterator itr = Seats.begin(); itr != Seats.end(); itr++)
+        if (!itr->second.IsEmpty() && itr->second.Passenger.Guid == passenger->GetGUID())
+            return itr->second.SeatAddon;
+
+    return nullptr;
+}
+
 int8 Vehicle::GetNextEmptySeat(int8 seatId, bool next) const
 {
     SeatMap::const_iterator seat = Seats.find(seatId);
@@ -293,7 +331,10 @@ void Vehicle::InstallAccessory(uint32 entry, int8 seatId, bool minion, uint8 typ
     if (TempSummon* accessory = _me->SummonCreature(entry, *_me, TempSummonType(type), summonTime))
     {
         if (minion)
+        {
             accessory->AddUnitTypeMask(UNIT_MASK_ACCESSORY);
+            accessory->GetThreatMgr().Initialize(); // reinitialize CanHaveThreatList cached value
+        }
 
         if (!_me->HandleSpellClick(accessory, seatId))
         {
@@ -336,12 +377,7 @@ bool Vehicle::AddPassenger(Unit* unit, int8 seatId)
             return false;
 
         if (!seat->second.IsEmpty())
-        {
-            if (Unit* passenger = ObjectAccessor::GetUnit(*GetBase(), seat->second.Passenger.Guid))
-                passenger->ExitVehicle();
-
-            seat->second.Passenger.Guid.Clear();
-        }
+            return false;
 
         ASSERT(seat->second.IsEmpty());
     }
@@ -360,12 +396,10 @@ bool Vehicle::AddPassenger(Unit* unit, int8 seatId)
         ASSERT(_usableSeatNum);
         --_usableSeatNum;
         if (!_usableSeatNum)
-        {
-            if (_me->IsPlayer())
-                _me->RemoveNpcFlag(UNIT_NPC_FLAG_PLAYER_VEHICLE);
-            else
-                _me->RemoveNpcFlag(UNIT_NPC_FLAG_SPELLCLICK);
-        }
+            _me->RemoveNpcFlag(_me->IsPlayer() ? UNIT_NPC_FLAG_PLAYER_VEHICLE : UNIT_NPC_FLAG_SPELLCLICK);
+        else
+            _me->SetNpcFlag(_me->IsPlayer() ?  UNIT_NPC_FLAG_PLAYER_VEHICLE : UNIT_NPC_FLAG_SPELLCLICK);
+    }
         //npcbot: do not allow other passengers on bot vehicles
         if (unit->IsNPCBot()/* &&
             (Seat->second.SeatInfo->m_flags & VEHICLE_SEAT_FLAG_CAN_CONTROL)*/)
@@ -376,7 +410,6 @@ bool Vehicle::AddPassenger(Unit* unit, int8 seatId)
                 _me->RemoveFlag(UNIT_NPC_FLAGS, UNIT_NPC_FLAG_SPELLCLICK);
         }
         //end npcbot
-    }
 
     if (!_me || !_me->IsInWorld() || _me->IsDuringRemoveFromWorld())
         return false;
@@ -390,7 +423,14 @@ bool Vehicle::AddPassenger(Unit* unit, int8 seatId)
 
     unit->AddUnitMovementFlag(MOVEMENTFLAG_ONTRANSPORT);
     VehicleSeatEntry const* veSeat = seat->second.SeatInfo;
-    unit->m_movementInfo.transport.pos.Relocate(veSeat->m_attachmentOffsetX, veSeat->m_attachmentOffsetY, veSeat->m_attachmentOffsetZ);
+    VehicleSeatAddon const* veSeatAddon = seat->second.SeatAddon;
+
+    float o = veSeatAddon ? veSeatAddon->SeatOrientationOffset : 0.f;
+    float x = veSeat->m_attachmentOffsetX;
+    float y = veSeat->m_attachmentOffsetY;
+    float z = veSeat->m_attachmentOffsetZ;
+
+    unit->m_movementInfo.transport.pos.Relocate(x, y, z, o);
     unit->m_movementInfo.transport.time = 0;
     unit->m_movementInfo.transport.seat = seat->first;
     unit->m_movementInfo.transport.guid = _me->GetGUID();
@@ -431,23 +471,30 @@ bool Vehicle::AddPassenger(Unit* unit, int8 seatId)
     if (_me->IsInWorld())
     {
         unit->SendClearTarget();                                // SMSG_BREAK_TARGET
-        unit->SetControlled(true, UNIT_STATE_ROOT);              // SMSG_FORCE_ROOT - In some cases we send SMSG_SPLINE_MOVE_ROOT here (for creatures)
+        unit->SetControlled(true, UNIT_STATE_ROOT);             // SMSG_FORCE_ROOT - In some cases we send SMSG_SPLINE_MOVE_ROOT here (for creatures)
+        if (unit->IsPlayer())
+            unit->ToPlayer()->SetExpectingChangeTransport(true);
         // also adds MOVEMENTFLAG_ROOT
         Movement::MoveSplineInit init(unit);
         init.DisableTransportPathTransformations();
-        init.MoveTo(veSeat->m_attachmentOffsetX, veSeat->m_attachmentOffsetY, veSeat->m_attachmentOffsetZ);
+        init.MoveTo(x, y, z, false, true);
         // Xinef: did not found anything unique in dbc, maybe missed something
         if (veSeat->m_ID == 3566 || veSeat->m_ID == 3567 || veSeat->m_ID == 3568 || veSeat->m_ID == 3570)
         {
-            float x = veSeat->m_attachmentOffsetX, y = veSeat->m_attachmentOffsetY, z = veSeat->m_attachmentOffsetZ, o;
             CalculatePassengerPosition(x, y, z, &o);
             init.SetFacing(_me->GetAngle(x, y));
         }
         else
-            init.SetFacing(0.0f);
+        {
+            init.SetFacing(o);
+        }
 
         init.SetTransportEnter();
         init.Launch();
+
+        // Put the vehicle in combat with anything that was threatening the passenger; the threat itself stays on the passenger
+        for (auto const& [guid, threatRef] : unit->GetThreatMgr().GetThreatenedByMeList())
+            threatRef->GetOwner()->GetThreatMgr().AddThreat(_me, 0.0f, nullptr, true, true);
 
         if (_me->IsCreature())
         {
@@ -498,6 +545,9 @@ void Vehicle::RemovePassenger(Unit* unit)
 
     seat->second.Passenger.Reset();
 
+    // RemoveCharmedBy() clears flying movement state, so cache this before uncharm.
+    bool canFly = _me->IsFlying() || _me->HasUnitMovementFlag(MOVEMENTFLAG_CAN_FLY) || _me->HasAuraType(SPELL_AURA_FLY);
+
     if (_me->IsCreature() && unit->IsPlayer() && seat->second.SeatInfo->m_flags & VEHICLE_SEAT_FLAG_CAN_CONTROL)
     {
         //npcbot
@@ -519,7 +569,7 @@ void Vehicle::RemovePassenger(Unit* unit)
     }
 
     // only for flyable vehicles
-    if (_me->IsFlying() && !_me->GetInstanceId() && unit->IsPlayer() && !(unit->ToPlayer()->GetDelayedOperations() & DELAYED_VEHICLE_TELEPORT) && _me->GetEntry() != 30275 /*NPC_WILD_WYRM*/)
+    if (canFly && !_me->GetInstanceId() && unit->IsPlayer() && !(unit->ToPlayer()->GetDelayedOperations() & DELAYED_VEHICLE_TELEPORT) && _me->GetEntry() != 30275 /*NPC_WILD_WYRM*/)
         _me->CastSpell(unit, VEHICLE_SPELL_PARACHUTE, true);
 
     if (_me->IsCreature())
@@ -578,14 +628,40 @@ bool Vehicle::IsVehicleInUse()
     return false;
 }
 
+bool Vehicle::IsControllableVehicle() const
+{
+    return std::ranges::any_of(Seats, [](auto const& seat) { return seat.second.SeatInfo->CanControl(); });
+}
+
 void Vehicle::TeleportVehicle(float x, float y, float z, float ang)
 {
-    _me->GetMap()->LoadGrid(x, y);
-    _me->NearTeleportTo(x, y, z, ang, true);
+    // Snapshot passenger GUIDs and cache the base BEFORE teleporting.
+    // Teleporting the base (Player::TeleportTo) may drop the mount/vehicle aura
+    // on a long hop (>100 yd) and call ExitVehicle() -> Unit::RemoveVehicleKit()
+    // -> delete m_vehicleKit, freeing THIS Vehicle (and its Seats) mid-call.
+    // Reading Seats after that is a use-after-free (see upstream PR #26116 review).
+    Unit* base = _me;
+    Vehicle* self = this;
+    std::vector<ObjectGuid> passengers;
+    passengers.reserve(Seats.size());
+    for (auto const& seat : Seats)
+        if (!seat.second.IsEmpty())
+            passengers.push_back(seat.second.Passenger.Guid);
 
-    for (SeatMap::const_iterator itr = Seats.begin(); itr != Seats.end(); ++itr)
-        if (Unit* passenger = ObjectAccessor::GetUnit(*GetBase(), itr->second.Passenger.Guid))
+    base->GetMap()->LoadGrid(x, y);
+    base->NearTeleportTo(x, y, z, ang, true, true); // vehicleTeleport=true: do not dismount base mid-call
+
+    // THIS Vehicle may have been deleted by the base teleport above (kit freed).
+    // If so, bail out - passengers were already ejected by ~Vehicle::Uninstall().
+    if (base->GetVehicleKit() != self)
+        return;
+
+    for (ObjectGuid const& guid : passengers)
+        if (Unit* passenger = ObjectAccessor::GetUnit(*base, guid))
         {
+            if (!passenger->IsInWorld())
+                continue;
+
             if (passenger->IsPlayer())
             {
                 passenger->ToPlayer()->SetMover(passenger);

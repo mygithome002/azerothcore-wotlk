@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,10 +23,23 @@
 #include "SharedDefines.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "World.h"
 
 using namespace Acore::Hyperlinks;
 
-inline uint8 toHex(char c) { return (c >= '0' && c <= '9') ? c - '0' + 0x10 : (c >= 'a' && c <= 'f') ? c - 'a' + 0x1a : 0x00; }
+inline uint8 toHex(char c)
+{
+    if (c >= '0' && c <= '9')
+        return c - '0' + 0x10;
+
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 0x1a;
+
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 0x1a;
+
+    return 0x00;
+}
 
 // Validates a single hyperlink
 HyperlinkInfo Acore::Hyperlinks::ParseSingleHyperlink(std::string_view str)
@@ -322,6 +335,20 @@ struct LinkValidator<LinkTags::trade>
     }
 };
 
+template <>
+struct LinkValidator<LinkTags::found>
+{
+    static bool IsTextValid(FoundLinkData const&, std::string_view text)
+    {
+        return !text.empty();
+    }
+
+    static bool IsColorValid(FoundLinkData const&, HyperlinkColor c)
+    {
+        return c == CHAT_LINK_COLOR_ACHIEVEMENT; // 0xffffff00 - yellow
+    }
+};
+
 template <typename TAG>
 static bool ValidateAs(HyperlinkInfo const& info)
 {
@@ -355,6 +382,7 @@ static bool ValidateLinkInfo(HyperlinkInfo const& info)
     TryValidateAs(creature);
     TryValidateAs(creature_entry);
     TryValidateAs(enchant);
+    TryValidateAs(found);
     TryValidateAs(gameevent);
     TryValidateAs(gameobject);
     TryValidateAs(gameobject_entry);

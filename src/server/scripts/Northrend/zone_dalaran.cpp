@@ -1,29 +1,32 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "AreaDefines.h"
 #include "CreatureScript.h"
+#include "Map.h"
 #include "MoveSplineInit.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "ScriptedGossip.h"
 #include "TaskScheduler.h"
 #include "World.h"
+#include <algorithm>
+#include <array>
 
-// Ours
 class npc_steam_powered_auctioneer : public CreatureScript
 {
 public:
@@ -148,7 +151,7 @@ public:
 
         void SetData(uint32 type, uint32 /*data*/) override
         {
-            switch(type)
+            switch (type)
             {
                 case ACTION_SHANDY_INTRO:
                     if (Creature* aquanos = me->FindNearestCreature(NPC_AQUANOS_ENTRY, 30, true))
@@ -163,7 +166,7 @@ public:
                     _events.ScheduleEvent(EVENT_OUTRO_DH, 10min);
                     break;
                 default:
-                    if(_lSource == type && _canWash)
+                    if (_lSource == type && _canWash)
                     {
                         _canWash = false;
                         _events.ScheduleEvent(EVENT_INTRO_DH2, type == ACTION_UNMENTIONABLES ? 4s : 10s);
@@ -243,7 +246,7 @@ public:
         if (player->GetQuestStatus(QUEST_SUITABLE_DISGUISE_A) == QUEST_STATUS_INCOMPLETE ||
                 player->GetQuestStatus(QUEST_SUITABLE_DISGUISE_H) == QUEST_STATUS_INCOMPLETE)
         {
-            if(player->GetTeamId() == TEAM_ALLIANCE)
+            if (player->GetTeamId() == TEAM_ALLIANCE)
                 AddGossipItemFor(player, GOSSIP_MENU_AQUANOS, GOSSIP_AQUANOS_ALLIANCE, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
             else
                 AddGossipItemFor(player, GOSSIP_MENU_AQUANOS, GOSSIP_AQUANOS_HORDE, GOSSIP_SENDER_MAIN, GOSSIP_ACTION_INFO_DEF);
@@ -398,7 +401,6 @@ public:
     };
 };
 
-// Theirs
 /*******************************************************
  * npc_mageguard_dalaran
  *******************************************************/
@@ -414,13 +416,51 @@ enum Spells
     SPELL_SILVER_COVENANT_DISGUISE_MALE    = 70972,
 };
 
-enum NPCs // All outdoor guards are within 35.0f of these NPCs
+enum NPCs
 {
-    NPC_APPLEBOUGH_A                       = 29547,
-    NPC_SWEETBERRY_H                       = 29715,
     NPC_SILVER_COVENANT_GUARDIAN_MAGE      = 29254,
     NPC_SUNREAVER_GUARDIAN_MAGE            = 29255,
 };
+
+// The guards must notice a trespasser anywhere inside the quarter they watch, not
+// just beside themselves: no guard stands within interaction range of most of the
+// floor area of either sanctum.
+constexpr float GUARD_WATCH_RANGE = 40.0f;
+
+// The area id only covers part of each sanctum. Most of the restricted ground -
+// the buildings, the inns, much of the interior - resolves to 4395 (Dalaran), the
+// same value the neutral Legerdemain Lounge reports, so an area check alone leaves
+// holes. WMOAreaTable.dbc does tell them apart, and it is what labels the building
+// on screen as you walk in, so match the WMO group as well.
+//
+// From WMOAreaTable.dbc for the Dalaran model (WMOID 5164): every group named
+// "The Silver Enclave" / "A Hero's Welcome", and "Sunreaver's Sanctuary" / "The
+// Filthy Animal". The neutral buildings - the Legerdemain Lounge, Sisters
+// Sorcerous, The Wonderworks, the Visitor Center - are in neither list, which is
+// what keeps a hostile visitor welcome in them. 25768 is The Beer Garden, a named
+// venue inside the Silver Enclave rather than a group named for the quarter, found
+// by sweeping the quarter and reading back the groups the server actually resolves.
+constexpr std::array<int32, 11> WMO_GROUPS_SILVER_ENCLAVE =
+{
+    24537, 24704, 24713, 25067, 25177, 25367, 25368, 25369, 25370, 25371, 25768
+};
+constexpr std::array<int32, 7> WMO_GROUPS_SUNREAVERS_SANCTUARY =
+{
+    24725, 25066, 25145, 25381, 25383, 25384, 25406
+};
+
+template <std::size_t N>
+bool IsInsideWMOGroups(WorldObject const* who, std::array<int32, N> const& groups)
+{
+    uint32 mogpFlags;
+    int32 adtId, rootId, groupId;
+    if (!who->GetMap()->GetAreaInfo(who->GetPhaseMask(),
+        who->GetPositionX(), who->GetPositionY(), who->GetPositionZ(),
+        mogpFlags, adtId, rootId, groupId))
+        return false;
+
+    return std::find(groups.begin(), groups.end(), groupId) != groups.end();
+}
 
 class npc_mageguard_dalaran : public CreatureScript
 {
@@ -429,7 +469,7 @@ public:
 
     struct npc_mageguard_dalaranAI : public ScriptedAI
     {
-        npc_mageguard_dalaranAI(Creature* creature) : ScriptedAI(creature)
+        explicit npc_mageguard_dalaranAI(Creature* creature) : ScriptedAI(creature)
         {
             creature->SetUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
             creature->ApplySpellImmune(0, IMMUNITY_DAMAGE, SPELL_SCHOOL_NORMAL, true);
@@ -444,49 +484,47 @@ public:
 
         void MoveInLineOfSight(Unit* who) override
         {
-            if (!who || !who->IsInWorld() || who->GetZoneId() != 4395)
+            if (!who || !who->IsInWorld() || who->GetZoneId() != AREA_DALARAN)
                 return;
 
-            if (!me->IsWithinDist(who, 5.0f, false))
+            if (!me->IsWithinDist(who, GUARD_WATCH_RANGE, false))
+                return;
+
+            if (who->IsCreature() && who->GetCreatureType() == CREATURE_TYPE_NON_COMBAT_PET)
                 return;
 
             Player* player = who->GetCharmerOrOwnerPlayerOrPlayerItself();
 
             if (!player || player->IsGameMaster() || player->IsBeingTeleported() || (player->GetPositionZ() > 670 && player->GetVehicle()) ||
                     // If player has Disguise aura for quest A Meeting With The Magister or An Audience With The Arcanist, do not teleport it away but let it pass
-                    player->HasAura(SPELL_SUNREAVER_DISGUISE_FEMALE) || player->HasAura(SPELL_SUNREAVER_DISGUISE_MALE) ||
-                    player->HasAura(SPELL_SILVER_COVENANT_DISGUISE_FEMALE) || player->HasAura(SPELL_SILVER_COVENANT_DISGUISE_MALE))
+                    player->HasAnyAuras(SPELL_SUNREAVER_DISGUISE_FEMALE, SPELL_SUNREAVER_DISGUISE_MALE, SPELL_SILVER_COVENANT_DISGUISE_FEMALE, SPELL_SILVER_COVENANT_DISGUISE_MALE))
                 return;
+
+            // Eject on where the trespasser actually is, not on how it is standing
+            // relative to the guard. Both halves are needed: the area ids cover each
+            // sanctum's open courtyard, the WMO groups cover its buildings, which
+            // report the plain zone id instead. Neutral streets, mailboxes, the sewer
+            // pipe and the neutral inns are in neither.
+            //
+            // Position comes from who rather than its owner, so that a pet sent into
+            // a quarter is ejected on its own footing - it is who that gets teleported.
+            uint32 const areaId = who->GetAreaId();
 
             switch (me->GetEntry())
             {
                 case NPC_SILVER_COVENANT_GUARDIAN_MAGE:
-                    if (player->GetTeamId() == TEAM_HORDE)              // Horde unit found in Alliance area
-                    {
-                        if (GetClosestCreatureWithEntry(me, NPC_APPLEBOUGH_A, 32.0f))
-                        {
-                            if (me->isInBackInMap(who, 12.0f))   // In my line of sight, "outdoors", and behind me
-                                DoCast(who, SPELL_TRESPASSER_A); // Teleport the Horde unit out
-                        }
-                        else                                      // In my line of sight, and "indoors"
-                            DoCast(who, SPELL_TRESPASSER_A);     // Teleport the Horde unit out
-                    }
+                    if (player->GetTeamId() == TEAM_HORDE
+                        && (areaId == AREA_THE_SILVER_ENCLAVE || IsInsideWMOGroups(who, WMO_GROUPS_SILVER_ENCLAVE)))
+                        DoCast(who, SPELL_TRESPASSER_A);
                     break;
                 case NPC_SUNREAVER_GUARDIAN_MAGE:
-                    if (player->GetTeamId() == TEAM_ALLIANCE)           // Alliance unit found in Horde area
-                    {
-                        if (GetClosestCreatureWithEntry(me, NPC_SWEETBERRY_H, 32.0f))
-                        {
-                            if (me->isInBackInMap(who, 12.0f))   // In my line of sight, "outdoors", and behind me
-                                DoCast(who, SPELL_TRESPASSER_H); // Teleport the Alliance unit out
-                        }
-                        else                                      // In my line of sight, and "indoors"
-                            DoCast(who, SPELL_TRESPASSER_H);     // Teleport the Alliance unit out
-                    }
+                    if (player->GetTeamId() == TEAM_ALLIANCE
+                        && (areaId == AREA_SUNREAVERS_SANCTUARY
+                            || IsInsideWMOGroups(who, WMO_GROUPS_SUNREAVERS_SANCTUARY)))
+                        DoCast(who, SPELL_TRESPASSER_H);
                     break;
             }
             me->SetOrientation(me->GetHomePosition().GetOrientation());
-            return;
         }
 
         void UpdateAI(uint32 /*diff*/) override {}
@@ -500,8 +538,6 @@ public:
 
 enum MinigobData
 {
-    ZONE_DALARAN            = 4395,
-
     SPELL_MANABONKED        = 61834,
     SPELL_TELEPORT_VISUAL   = 51347,
     SPELL_IMPROVED_BLINK    = 61995,
@@ -528,6 +564,7 @@ struct npc_minigob_manabonk : public ScriptedAI
     void Reset() override
     {
         me->SetVisible(false);
+        playerGUID.Clear();
         events.ScheduleEvent(EVENT_SELECT_TARGET, 1s);
     }
 
@@ -538,7 +575,7 @@ struct npc_minigob_manabonk : public ScriptedAI
 
         me->GetMap()->DoForAllPlayers([&](Player* player)
             {
-                if (player->GetZoneId() == ZONE_DALARAN && !player->IsFlying() && !player->IsMounted() && !player->IsGameMaster())
+                if (player->GetZoneId() == AREA_DALARAN && !player->IsFlying() && !player->IsMounted() && !player->IsGameMaster())
                     playerInDalaranList.push_back(player);
             });
 
@@ -581,6 +618,11 @@ struct npc_minigob_manabonk : public ScriptedAI
                 case EVENT_POLYMORPH:
                     if (Player* player = ObjectAccessor::GetPlayer(*me, playerGUID))
                     {
+                        if (player->IsGameMaster())
+                        {
+                            me->DespawnOrUnsummon();
+                            return;
+                        }
                         DoCast(player, SPELL_MANABONKED);
                         SendMailToPlayer(player);
                     }
@@ -596,7 +638,7 @@ struct npc_minigob_manabonk : public ScriptedAI
                 case EVENT_MOVE:
                     {
                         Position pos = me->GetRandomNearPosition((urand(15, 40)));
-                        me->GetMotionMaster()->MovePoint(0, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ(), true);
+                        me->GetMotionMaster()->MovePoint(0, pos.GetPositionX(), pos.GetPositionY(), pos.GetPositionZ());
                     }
                     events.ScheduleEvent(EVENT_DESPAWN_VISUAL, 3s);
                     events.ScheduleEvent(EVENT_DESPAWN, 4s);

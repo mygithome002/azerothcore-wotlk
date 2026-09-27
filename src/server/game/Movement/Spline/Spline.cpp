@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -94,7 +94,7 @@ namespace Movement
         position.z = z;
     }*/
 
-    inline void C_Evaluate(const Vector3* vertice, float t, const Matrix4& matr, Vector3& result)
+    inline void C_Evaluate(Vector3 const* vertice, float t, Matrix4 const& matr, Vector3& result)
     {
         Vector4 tvec(t * t * t, t * t, t, 1.f);
         Vector4 weights(tvec * matr);
@@ -103,7 +103,7 @@ namespace Movement
                  + vertice[2] * weights[2] + vertice[3] * weights[3];
     }
 
-    inline void C_Evaluate_Derivative(const Vector3* vertice, float t, const Matrix4& matr, Vector3& result)
+    inline void C_Evaluate_Derivative(Vector3 const* vertice, float t, Matrix4 const& matr, Vector3& result)
     {
         Vector4 tvec(3.f * t * t, 2.f * t, 1.f, 0.f);
         Vector4 weights(tvec * matr);
@@ -161,7 +161,7 @@ namespace Movement
         ASSERT(index >= index_lo && index < index_hi);
 
         Vector3 curPos, nextPos;
-        const Vector3* p = &points[index - 1];
+        Vector3 const* p = &points[index - 1];
         curPos = nextPos = p[1];
 
         index_type i = 1;
@@ -182,7 +182,7 @@ namespace Movement
         ASSERT(index >= index_lo && index < index_hi);
 
         Vector3 curPos, nextPos;
-        const Vector3* p = &points[index];
+        Vector3 const* p = &points[index];
 
         C_Evaluate(p, 0.f, s_Bezier3Coeffs, nextPos);
         curPos = nextPos;
@@ -199,23 +199,25 @@ namespace Movement
         return length;
     }
 
-    void SplineBase::init_spline(const Vector3* controls, index_type count, EvaluationMode m)
+    void SplineBase::init_spline(Vector3 const* controls, index_type count, EvaluationMode m, float orientation)
     {
         m_mode = m;
         cyclic = false;
+        initialOrientation = orientation;
 
         (this->*initializers[m_mode])(controls, count, cyclic, 0);
     }
 
-    void SplineBase::init_cyclic_spline(const Vector3* controls, index_type count, EvaluationMode m, index_type cyclic_point)
+    void SplineBase::init_cyclic_spline(Vector3 const* controls, index_type count, EvaluationMode m, index_type cyclic_point, float orientation)
     {
         m_mode = m;
         cyclic = true;
+        initialOrientation = orientation;
 
         (this->*initializers[m_mode])(controls, count, cyclic, cyclic_point);
     }
 
-    void SplineBase::InitLinear(const Vector3* controls, index_type count, bool cyclic, index_type cyclic_point)
+    void SplineBase::InitLinear(Vector3 const* controls, index_type count, bool cyclic, index_type cyclic_point)
     {
         ASSERT(count >= 2);
         const int real_size = count + 1;
@@ -235,7 +237,7 @@ namespace Movement
         index_hi = cyclic ? count : (count - 1);
     }
 
-    void SplineBase::InitCatmullRom(const Vector3* controls, index_type count, bool cyclic, index_type cyclic_point)
+    void SplineBase::InitCatmullRom(Vector3 const* controls, index_type count, bool cyclic, index_type cyclic_point)
     {
         const int real_size = count + (cyclic ? (1 + 2) : (1 + 1));
 
@@ -253,14 +255,18 @@ namespace Movement
             if (cyclic_point == 0)
                 points[0] = controls[count - 1];
             else
-                points[0] = controls[0].lerp(controls[1], -1);
+                points[0] = controls[0] - G3D::Vector3{ std::cos(initialOrientation), std::sin(initialOrientation), 0.0f };
 
             points[high_index + 1] = controls[cyclic_point];
             points[high_index + 2] = controls[cyclic_point + 1];
         }
         else
         {
-            points[0] = controls[0].lerp(controls[1], -1);
+            if (m_mode == ModeCatmullrom)
+                points[0] = controls[0] - G3D::Vector3{ std::cos(initialOrientation), std::sin(initialOrientation), 0.0f };
+            else
+                points[0] = controls[0].lerp(controls[1], -1);
+
             points[high_index + 1] = controls[count - 1];
         }
 
@@ -268,7 +274,7 @@ namespace Movement
         index_hi = high_index + (cyclic ? 1 : 0);
     }
 
-    void SplineBase::InitBezier3(const Vector3* controls, index_type count, bool /*cyclic*/, index_type /*cyclic_point*/)
+    void SplineBase::InitBezier3(Vector3 const* controls, index_type count, bool /*cyclic*/, index_type /*cyclic_point*/)
     {
         index_type c = count / 3u * 3u;
         index_type t = c / 3u;
@@ -291,7 +297,7 @@ namespace Movement
     std::string SplineBase::ToString() const
     {
         std::stringstream str;
-        const char* mode_str[ModesEnd] = {"Linear", "CatmullRom", "Bezier3", "Uninitialized"};
+        char const* mode_str[ModesEnd] = {"Linear", "CatmullRom", "Bezier3", "Uninitialized"};
 
         index_type count = this->points.size();
         str << "mode: " << mode_str[mode()] << std::endl;
@@ -301,5 +307,4 @@ namespace Movement
 
         return str.str();
     }
-
 }

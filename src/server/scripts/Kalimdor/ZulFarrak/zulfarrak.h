@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -49,7 +49,22 @@ enum ZulFarrakGameobjects
 enum ZulFarrakData
 {
     DATA_PYRAMID                = 0,
-    DATA_GAHZRILLA              = 1
+    DATA_GAHZRILLA              = 1,
+    DATA_END_DOOR               = 2
+};
+
+enum ZulFarrakActions
+{
+    ACTION_BLY_BETRAYAL = 1,
+    ACTION_DESTROY_GATES
+};
+
+enum ZulFarrakPoints
+{
+    POINT_CREW_STAIRS = 1,
+    POINT_CREW_DESCENT,
+    POINT_CREW_GATHER,
+    POINT_WEEGLI_DOOR
 };
 
 enum ZFPyramidPhases

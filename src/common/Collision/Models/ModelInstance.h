@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,6 +23,7 @@
 #include <G3D/Matrix3.h>
 #include <G3D/Ray.h>
 #include <G3D/Vector3.h>
+#include <memory>
 
 namespace VMAP
 {
@@ -50,30 +51,28 @@ namespace VMAP
         float iScale;
         G3D::AABox iBound;
         std::string name;
-        bool operator==(const ModelSpawn& other) const { return ID == other.ID; }
+        bool operator==(ModelSpawn const& other) const { return ID == other.ID; }
         //uint32 hashCode() const { return ID; }
         // temp?
-        [[nodiscard]] const G3D::AABox& GetBounds() const { return iBound; }
+        [[nodiscard]] G3D::AABox const& GetBounds() const { return iBound; }
 
         static bool readFromFile(FILE* rf, ModelSpawn& spawn);
-        static bool writeToFile(FILE* rw, const ModelSpawn& spawn);
+        static bool writeToFile(FILE* rw, ModelSpawn const& spawn);
     };
 
     class ModelInstance: public ModelSpawn
     {
     public:
         ModelInstance() { }
-        ModelInstance(const ModelSpawn& spawn, WorldModel* model);
-        void setUnloaded() { iModel = nullptr; }
-        bool intersectRay(const G3D::Ray& pRay, float& pMaxDist, bool StopAtFirstHit, ModelIgnoreFlags ignoreFlags) const;
-        void intersectPoint(const G3D::Vector3& p, AreaInfo& info) const;
-        bool GetLocationInfo(const G3D::Vector3& p, LocationInfo& info) const;
-        bool GetLiquidLevel(const G3D::Vector3& p, LocationInfo& info, float& liqHeight) const;
-        WorldModel* getWorldModel() { return iModel; }
+        ModelInstance(ModelSpawn const& spawn, std::shared_ptr<WorldModel> model);
+        bool intersectRay(G3D::Ray const& pRay, float& pMaxDist, bool StopAtFirstHit, ModelIgnoreFlags ignoreFlags) const;
+        bool GetLocationInfo(G3D::Vector3 const& p, LocationInfo& info) const;
+        bool GetLiquidLevel(G3D::Vector3 const& p, LocationInfo& info, float& liqHeight) const;
+        WorldModel* getWorldModel() { return iModel.get(); }
     protected:
         G3D::Matrix3 iInvRot;
         float iInvScale{0.0f};
-        WorldModel* iModel{nullptr};
+        std::shared_ptr<WorldModel> iModel;
     };
 } // namespace VMAP
 

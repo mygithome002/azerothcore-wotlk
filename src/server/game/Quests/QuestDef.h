@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -129,7 +129,7 @@ enum QuestFlags
 {
     // Flags used at server and sent to client
     QUEST_FLAGS_NONE                    = 0x00000000,
-    QUEST_FLAGS_STAY_ALIVE              = 0x00000001,   // Not used currently
+    QUEST_FLAGS_STAY_ALIVE              = 0x00000001,   // Quest is failed when the player dies
     QUEST_FLAGS_PARTY_ACCEPT            = 0x00000002,   // Not used currently. If player in party, all players that can accept this quest will receive confirmation box to accept quest CMSG_QUEST_CONFIRM_ACCEPT/SMSG_QUEST_CONFIRM_ACCEPT
     QUEST_FLAGS_EXPLORATION             = 0x00000004,   // Not used currently
     QUEST_FLAGS_SHARABLE                = 0x00000008,   // Can be shared: Player::CanShareQuest()
@@ -165,17 +165,18 @@ enum QuestSpecialFlags
     QUEST_SPECIAL_FLAGS_CAST                    = 0x0020,    // Set by 32 in SpecialFlags in DB if the quest requires RequiredOrNpcGo killcredit but NOT kill (a spell cast)
     QUEST_SPECIAL_FLAGS_NO_REP_SPILLOVER        = 0x0040,    // Set by 64 in SpecialFlags in DB if the quest does not share rewarded reputation with other allied factions
     QUEST_SPECIAL_FLAGS_CAN_FAIL_IN_ANY_STATE   = 0x0080,    // Set by 128 in SpecialFlags in DB if the quest is allowed to fail in Player::FailQuest() independant of its current state
+    QUEST_SPECIAL_FLAGS_NO_LOREMASTER_COUNT     = 0x0100,    // Set by 256 in SpecialFlags in DB if the quest should not count towards Loremaster Achievement
     // room for more custom flags
 
     QUEST_SPECIAL_FLAGS_DB_ALLOWED              = QUEST_SPECIAL_FLAGS_REPEATABLE | QUEST_SPECIAL_FLAGS_EXPLORATION_OR_EVENT | QUEST_SPECIAL_FLAGS_AUTO_ACCEPT |
                                                   QUEST_SPECIAL_FLAGS_DF_QUEST | QUEST_SPECIAL_FLAGS_MONTHLY | QUEST_SPECIAL_FLAGS_CAST | QUEST_SPECIAL_FLAGS_NO_REP_SPILLOVER |
-                                                  QUEST_SPECIAL_FLAGS_CAN_FAIL_IN_ANY_STATE,
+                                                  QUEST_SPECIAL_FLAGS_CAN_FAIL_IN_ANY_STATE | QUEST_SPECIAL_FLAGS_NO_LOREMASTER_COUNT,
 
-    QUEST_SPECIAL_FLAGS_DELIVER                 = 0x0100,   // Internal flag computed only
-    QUEST_SPECIAL_FLAGS_SPEAKTO                 = 0x0200,   // Internal flag computed only
-    QUEST_SPECIAL_FLAGS_KILL                    = 0x0400,   // Internal flag computed only
-    QUEST_SPECIAL_FLAGS_TIMED                   = 0x0800,   // Internal flag computed only
-    QUEST_SPECIAL_FLAGS_PLAYER_KILL             = 0x1000    // Internal flag computed only
+    QUEST_SPECIAL_FLAGS_DELIVER                 = 0x0200,   // Internal flag computed only
+    QUEST_SPECIAL_FLAGS_SPEAKTO                 = 0x0400,   // Internal flag computed only
+    QUEST_SPECIAL_FLAGS_KILL                    = 0x0800,   // Internal flag computed only
+    QUEST_SPECIAL_FLAGS_TIMED                   = 0x1000,   // Internal flag computed only
+    QUEST_SPECIAL_FLAGS_PLAYER_KILL             = 0x2000    // Internal flag computed only
 };
 
 struct QuestLocale
@@ -248,6 +249,7 @@ public:
     [[nodiscard]] int32  GetPrevQuestId() const { return PrevQuestId; }
     [[nodiscard]] uint32 GetNextQuestId() const { return NextQuestId; }
     [[nodiscard]] int32  GetExclusiveGroup() const { return ExclusiveGroup; }
+    [[nodiscard]] uint32 GetBreadcrumbForQuestId() const { return BreadcrumbForQuestId; }
     [[nodiscard]] uint32 GetNextQuestInChain() const { return RewardNextQuest; }
     [[nodiscard]] uint32 GetCharTitleId() const { return RewardTitleId; }
     [[nodiscard]] uint32 GetPlayersSlain() const { return RequiredPlayerKills; }
@@ -389,6 +391,7 @@ protected:
     int32  PrevQuestId            = 0;
     uint32 NextQuestId            = 0;
     int32  ExclusiveGroup         = 0;
+    uint32 BreadcrumbForQuestId   = 0;
     uint32 RewardMailTemplateId   = 0;
     uint32 RewardMailDelay        = 0;
     uint32 RequiredSkillId        = 0;

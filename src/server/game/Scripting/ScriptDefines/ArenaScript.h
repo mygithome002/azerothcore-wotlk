@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,6 +22,8 @@
 #include "ScriptObject.h"
 #include <vector>
 
+struct ArenaTeamMember;
+
 enum ArenaHook
 {
     ARENAHOOK_CAN_ADD_MEMBER,
@@ -29,6 +31,9 @@ enum ArenaHook
     ARENAHOOK_CAN_SAVE_TO_DB,
     ARENAHOOK_ON_BEFORE_CHECK_WIN_CONDITION,
     ARENAHOOK_ON_ARENA_START,
+    ARENAHOOK_ON_BEFORE_TEAM_MEMBER_UPDATE,
+    ARENAHOOK_CAN_SAVE_ARENA_STATS_FOR_MEMBER,
+    ARENAHOOK_ON_ADD_MEMBER,
     ARENAHOOK_END
 };
 
@@ -36,7 +41,7 @@ class ArenaScript : public ScriptObject
 {
 protected:
 
-    ArenaScript(const char* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
+    ArenaScript(char const* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
 
 public:
 
@@ -51,6 +56,18 @@ public:
     [[nodiscard]] virtual bool CanSaveToDB(ArenaTeam* /*team*/) { return true; }
 
     virtual void OnArenaStart(Battleground* /* bg */) { };
+
+    [[nodiscard]] virtual bool OnBeforeArenaTeamMemberUpdate(ArenaTeam* /*team*/, Player* /*player*/, bool /*won*/, uint32 /*opponentMatchmakerRating*/, int32 /*matchmakerChange*/) { return false; }
+
+    [[nodiscard]] virtual bool CanSaveArenaStatsForMember(ArenaTeam* /*team*/, ObjectGuid /*playerGuid*/) { return true; }
+
+    // Called with the fully built member right before it is added to the team and written to
+    // arena_team_member. The personal rating and the week/season counters left on the struct are
+    // what the team holds and what is stored. MatchMakerRating and MaxMMR are held in memory but
+    // not written here, only by the next ArenaTeam::SaveToDB; Guid, Name and Class are identity,
+    // and changing them desyncs the member from its row and the character cache.
+    // Cannot veto the join, CanAddMember does that.
+    virtual void OnAddMember(ArenaTeam* /*team*/, ArenaTeamMember& /*member*/) { }
 };
 
 #endif

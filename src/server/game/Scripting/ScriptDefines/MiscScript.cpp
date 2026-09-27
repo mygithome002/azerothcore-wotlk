@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -94,7 +94,7 @@ void ScriptMgr::OnAfterLootTemplateProcess(Loot* loot, LootTemplate const* tab, 
     CALL_ENABLED_HOOKS(MiscScript, MISCHOOK_ON_AFTER_LOOT_TEMPLATE_PROCESS, script->OnAfterLootTemplateProcess(loot, tab, store, lootOwner, personal, noEmptyError, lootMode));
 }
 
-void ScriptMgr::OnPlayerSetPhase(const AuraEffect* auraEff, AuraApplication const* aurApp, uint8 mode, bool apply, uint32& newPhase)
+void ScriptMgr::OnPlayerSetPhase(AuraEffect const* auraEff, AuraApplication const* aurApp, uint8 mode, bool apply, uint32& newPhase)
 {
     CALL_ENABLED_HOOKS(MiscScript, MISCHOOK_ON_PLAYER_SET_PHASE, script->OnPlayerSetPhase(auraEff, aurApp, mode, apply, newPhase));
 }
@@ -109,7 +109,7 @@ void ScriptMgr::GetDialogStatus(Player* player, Object* questgiver)
     CALL_ENABLED_HOOKS(MiscScript, MISCHOOK_GET_DIALOG_STATUS, script->GetDialogStatus(player, questgiver));
 }
 
-MiscScript::MiscScript(const char* name, std::vector<uint16> enabledHooks)
+MiscScript::MiscScript(char const* name, std::vector<uint16> enabledHooks)
     : ScriptObject(name, MISCHOOK_END)
 {
     // If empty - enable all available hooks.

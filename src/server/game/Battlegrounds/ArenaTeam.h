@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -21,7 +21,6 @@
 #include "Map.h"
 #include "QueryResult.h"
 #include <list>
-#include <map>
 
 class WorldSession;
 class WorldPacket;
@@ -153,7 +152,7 @@ public:
     static uint8 GetReqPlayersForType(uint32 type);
     [[nodiscard]] ObjectGuid GetCaptain() const { return CaptainGuid; }
     [[nodiscard]] std::string const& GetName() const       { return TeamName; }
-    [[nodiscard]] const ArenaTeamStats& GetStats() const { return Stats; }
+    [[nodiscard]] ArenaTeamStats const& GetStats() const { return Stats; }
     void SetArenaTeamStats(ArenaTeamStats& stats) { Stats = stats; }
 
     [[nodiscard]] uint32 GetRating() const          { return Stats.Rating; }
@@ -199,15 +198,15 @@ public:
     int32  GetMatchmakerRatingMod(uint32 ownRating, uint32 opponentRating, bool won);
     int32  GetRatingMod(uint32 ownRating, uint32 opponentRating, bool won);
     float  GetChanceAgainst(uint32 ownRating, uint32 opponentRating);
-    int32  WonAgainst(uint32 Own_MMRating, uint32 Opponent_MMRating, int32& rating_change, const Map* bgMap);
+    int32  WonAgainst(uint32 Own_MMRating, uint32 Opponent_MMRating, int32& rating_change, Map const* bgMap);
     void   MemberWon(Player* player, uint32 againstMatchmakerRating, int32 MatchmakerRatingChange);
-    int32  LostAgainst(uint32 Own_MMRating, uint32 Opponent_MMRating, int32& rating_change, const Map* bgMap);
+    int32  LostAgainst(uint32 Own_MMRating, uint32 Opponent_MMRating, int32& rating_change, Map const* bgMap);
     void   MemberLost(Player* player, uint32 againstMatchmakerRating, int32 MatchmakerRatingChange = -12);
 
     void UpdateArenaPointsHelper(std::map<ObjectGuid, uint32>& PlayerPoints);
 
     bool FinishWeek(); // returns true if arena team played this week
-    void FinishGame(int32 mod, const Map* bgMap);
+    void FinishGame(int32 mod, Map const* bgMap);
 
     void SetPreviousOpponents(uint32 arenaTeamId) { PreviousOpponents = arenaTeamId; }
     uint32 GetPreviousOpponents() { return PreviousOpponents; }
@@ -217,6 +216,10 @@ public:
     // Containers
     static std::unordered_map<uint32, uint8> ArenaSlotByType; // Slot -> Type
     static std::unordered_map<uint8, uint8> ArenaReqPlayersForType; // Type -> Players count
+
+    void SetEmblem(uint32 backgroundColor, uint8 emblemStyle, uint32 emblemColor, uint8 borderStyle,
+        uint32 borderColor);
+    void SetRatingForAll(uint32 rating);
 
 protected:
     uint32      TeamId;

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -59,15 +59,10 @@ DatabaseWorkerPool<T>::DatabaseWorkerPool() :
 {
     WPFatal(mysql_thread_safe(), "Used MySQL library isn't thread-safe.");
 
-#if !defined(MARIADB_VERSION_ID) || MARIADB_VERSION_ID < 100600
     bool isSupportClientDB = mysql_get_client_version() >= MIN_MYSQL_CLIENT_VERSION;
     bool isSameClientDB = mysql_get_client_version() == MYSQL_VERSION_ID;
-#else // MariaDB 10.6+
-    bool isSupportClientDB = mysql_get_client_version() >= MIN_MYSQL_CLIENT_VERSION;
-    bool isSameClientDB    = true; // Client version 3.2.3?
-#endif
 
-    WPFatal(isSupportClientDB, "AzerothCore does not support MySQL versions below 5.7 or MariaDB versions below 10.5.\n\nFound version: {} / {}. Server compiled with: {}.\nSearch the wiki for ACE00043 in Common Errors (https://www.azerothcore.org/wiki/common-errors#ace00043).",
+    WPFatal(isSupportClientDB, "AzerothCore does not support MySQL versions below 8.0\n\nFound version: {} / {}. Server compiled with: {}.\nSearch the wiki for ACE00043 in Common Errors (https://www.azerothcore.org/wiki/common-errors#ace00043).",
         mysql_get_client_info(), mysql_get_client_version(), MYSQL_VERSION_ID);
     WPFatal(isSameClientDB, "Used MySQL library version ({} id {}) does not match the version id used to compile AzerothCore (id {}).\nSearch the wiki for ACE00046 in Common Errors (https://www.azerothcore.org/wiki/common-errors#ace00046).",
         mysql_get_client_info(), mysql_get_client_version(), MYSQL_VERSION_ID);
@@ -96,6 +91,11 @@ uint32 DatabaseWorkerPool<T>::Open()
     LOG_INFO("sql.driver", "Opening DatabasePool '{}'. Asynchronous connections: {}, synchronous connections: {}.",
         GetDatabaseName(), _async_threads, _synch_threads);
 
+    _queue->Cancel();
+    _connections[IDX_ASYNC].clear();
+    _connections[IDX_SYNCH].clear();
+    _queue->Reset();
+
     uint32 error = OpenConnections(IDX_ASYNC, _async_threads);
 
     if (error)
@@ -117,7 +117,11 @@ uint32 DatabaseWorkerPool<T>::Open()
 template <class T>
 void DatabaseWorkerPool<T>::Close()
 {
-    LOG_INFO("sql.driver", "Closing down DatabasePool '{}'.", GetDatabaseName());
+    LOG_INFO("sql.driver", "Closing down DatabasePool '{}'. Waiting for {} queries to finish...", GetDatabaseName(), _queue->Size());
+
+    // Gracefully close async query queue, worker threads will block when the destructor
+    // is called from the .clear() functions below until the queue is empty
+    _queue->Shutdown();
 
     //! Closes the actualy MySQL connection.
     _connections[IDX_ASYNC].clear();
@@ -378,8 +382,6 @@ void DatabaseWorkerPool<T>::KeepAlive()
 *
 * DatabaseIncompatibleVersion("8.0.35") => false
 * DatabaseIncompatibleVersion("5.6.6") => true
-* DatabaseIncompatibleVersion("5.5.5-10.5.5-MariaDB") => false
-* DatabaseIncompatibleVersion("5.5.5-10.4.0-MariaDB") => true
 *
 * Adapted from stackoverflow response
 * https://stackoverflow.com/a/2941508
@@ -410,17 +412,6 @@ bool DatabaseIncompatibleVersion(std::string const mysqlVersion)
     uint8 offset = 0;
     std::string minVersion = MIN_MYSQL_SERVER_VERSION;
 
-    // If the version string contains "MariaDB", use that
-    if (mysqlVersion.find("MariaDB") != std::string::npos)
-    {
-        // All MariaDB 10.X versions have a prefix of 5.5.5 from the
-        // mysql_get_server_info() function. To make matters more
-        // annoying, this is removed in MariaDB 11.X
-        if (mysqlVersion.rfind("5.5.5-", 0) == 0)
-            offset = 6;
-        minVersion = MIN_MARIADB_SERVER_VERSION;
-    }
-
     auto parsedMySQLVersion = parse(mysqlVersion.substr(offset));
     auto parsedMinVersion = parse(minVersion);
 
@@ -450,12 +441,13 @@ uint32 DatabaseWorkerPool<T>::OpenConnections(InternalIndex type, uint8 numConne
         if (uint32 error = connection->Open())
         {
             // Failed to open a connection or invalid version, abort and cleanup
+            _queue->Cancel();
             _connections[type].clear();
             return error;
         }
         else if (DatabaseIncompatibleVersion(connection->GetServerInfo()))
         {
-            LOG_ERROR("sql.driver", "AzerothCore does not support MySQL versions below 5.7 or MariaDB versions below 10.5.\n\nFound server version: {}. Server compiled with: {}.",
+            LOG_ERROR("sql.driver", "AzerothCore does not support MySQL versions below 8.0\n\nFound server version: {}. Server compiled with: {}.",
                 connection->GetServerInfo(), MYSQL_VERSION_ID);
             return 1;
         }

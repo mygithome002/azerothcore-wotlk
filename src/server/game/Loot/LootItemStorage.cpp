@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -19,6 +19,8 @@
 #include "DatabaseEnv.h"
 #include "ObjectMgr.h"
 #include "PreparedStatement.h"
+#include "QueryResult.h"
+#include "Timer.h"
 
 LootItemStorage::LootItemStorage()
 {
@@ -54,8 +56,8 @@ void LootItemStorage::LoadStorageFromDB()
         Field* fields = result->Fetch();
 
         StoredLootItemList& itemList = lootItemStore[ObjectGuid::Create<HighGuid::Item>(fields[0].Get<uint32>())];
-        itemList.push_back(StoredLootItem(fields[1].Get<uint32>(), fields[2].Get<uint32>(), fields[3].Get<uint32>(), fields[4].Get<int32>(), fields[5].Get<uint32>(), fields[6].Get<bool>(),
-            fields[7].Get<bool>(), fields[8].Get<bool>(), fields[9].Get<bool>(), fields[10].Get<bool>(), fields[11].Get<bool>(), fields[12].Get<uint32>()));
+        itemList.emplace_back(fields[1].Get<uint32>(), fields[2].Get<uint32>(), fields[3].Get<uint32>(), fields[4].Get<int32>(), fields[5].Get<uint32>(), fields[6].Get<bool>(),
+            fields[7].Get<bool>(), fields[8].Get<bool>(), fields[9].Get<bool>(), fields[10].Get<bool>(), fields[11].Get<bool>(), fields[12].Get<uint32>());
 
         ++count;
     } while (result->NextRow());
@@ -94,7 +96,7 @@ void LootItemStorage::AddNewStoredLoot(Loot* loot, Player* /*player*/)
     // Gold at first
     if (loot->gold)
     {
-        itemList.push_back(StoredLootItem(0, 0, loot->gold, 0, 0, false, false, false, false, false, false, 0));
+        itemList.emplace_back(0, 0, loot->gold, 0, 0, false, false, false, false, false, false, 0);
 
         uint8 index = 0;
         stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_ITEMCONTAINER_SINGLE_ITEM);
@@ -134,8 +136,8 @@ void LootItemStorage::AddNewStoredLoot(Loot* loot, Player* /*player*/)
                 conditionLootId = li->conditions.front()->SourceGroup;
             }
 
-            itemList.push_back(StoredLootItem(li->itemid, li->itemIndex, li->count, li->randomPropertyId, li->randomSuffix, li->follow_loot_rules, li->freeforall, li->is_blocked, li->is_counted,
-                li->is_underthreshold, li->needs_quest, conditionLootId));
+            itemList.emplace_back(li->itemid, li->itemIndex, li->count, li->randomPropertyId, li->randomSuffix, li->follow_loot_rules, li->freeforall, li->is_blocked, li->is_counted,
+                li->is_underthreshold, li->needs_quest, conditionLootId);
 
             uint8 index = 0;
             stmt = CharacterDatabase.GetPreparedStatement(CHAR_INS_ITEMCONTAINER_SINGLE_ITEM);
@@ -248,7 +250,7 @@ void LootItemStorage::RemoveStoredLootItem(ObjectGuid containerGUID, uint32 item
 
     // loot with empty itemList but unlootedCount > 0
     // must be deleted manually by the player or traded
-    if (!loot->unlootedCount)
+    if (!loot->unlootedCount && !loot->gold)
         lootItemStore.erase(itr);
 }
 

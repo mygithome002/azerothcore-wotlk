@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -88,7 +88,7 @@ struct boss_the_lurker_below : public BossAI
             pool->SetRespawnTime(10);
             pool->SaveRespawnTime(10);
         }
-        me->DespawnOrUnsummon(2000);
+        me->DespawnOrUnsummon(2s);
     }
 
     void DamageTaken(Unit* /*attacker*/, uint32& damage, DamageEffectType /*type*/, SpellSchoolMask /*school*/) override
@@ -129,7 +129,7 @@ struct boss_the_lurker_below : public BossAI
     {
         BossAI::JustEngagedWith(who);
 
-        SchedulerPhaseOne(38800ms, 91000ms);
+        SchedulerPhaseOne(38800ms, 91s);
     }
 
     void SummonedCreatureDies(Creature* /*summon*/, Unit* /*killer*/) override
@@ -171,7 +171,6 @@ struct boss_the_lurker_below : public BossAI
             scheduler.CancelAll();
             DoCastSelf(SPELL_SUBMERGE_VISUAL);
             DoCastSelf(SPELL_CLEAR_ALL_DEBUFFS, true);
-            me->SetStandState(UNIT_STAND_STATE_SUBMERGED);
             me->SetUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
             for (uint8 i = 0; i < MAX_SUMMONS; ++i)
             {
@@ -187,11 +186,11 @@ struct boss_the_lurker_below : public BossAI
         scheduler.Schedule(timer, [this](TaskContext)
         {
             me->setAttackTimer(BASE_ATTACK, 6000);
-            me->SetStandState(UNIT_STAND_STATE_STAND);
+            me->RemoveAurasDueToSpell(SPELL_SUBMERGE_VISUAL);
             me->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
             scheduler.CancelAll();
-            SchedulerPhaseOne(10000ms, 90750ms);
+            SchedulerPhaseOne(10s, 90750ms);
         });
     }
 
@@ -212,10 +211,9 @@ struct boss_the_lurker_below : public BossAI
         }
         else
         {
-            ThreatContainer::StorageType const& t_list = me->GetThreatMgr().GetThreatList();
-            for (ThreatReference const* ref : t_list)
+            for (ThreatReference const* ref : me->GetThreatMgr().GetUnsortedThreatList())
             {
-                if (Unit* threatTarget = ObjectAccessor::GetUnit(*me, ref->getUnitGuid()))
+                if (Unit* threatTarget = ref->GetVictim())
                 {
                     if (me->IsWithinMeleeRange(threatTarget))
                     {

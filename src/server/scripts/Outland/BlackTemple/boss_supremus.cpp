@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -48,12 +48,7 @@ enum Supremus
 struct boss_supremus : public BossAI
 {
     boss_supremus(Creature* creature) : BossAI(creature, DATA_SUPREMUS)
-    {
-        scheduler.SetValidator([this]
-        {
-            return !me->HasUnitState(UNIT_STATE_CASTING);
-        });
-    }
+    {    }
 
     void Reset() override
     {
@@ -139,7 +134,8 @@ struct boss_supremus : public BossAI
                     DoResetThreatList();
                     me->AddThreat(target, 5000000.0f);
                     Talk(EMOTE_NEW_TARGET);
-                    DoCastVictim(SPELL_CHARGE);
+                    if (target->IsWithinDist(me, 40))
+                        DoCast(target, SPELL_CHARGE);
                 }
 
                 context.Repeat(10s);
@@ -167,13 +163,14 @@ struct boss_supremus : public BossAI
     Unit* FindHatefulStrikeTarget()
     {
         Unit* target = nullptr;
-        ThreatContainer::StorageType const& threatlist = me->GetThreatMgr().GetThreatList();
-        for (ThreatContainer::StorageType::const_iterator i = threatlist.begin(); i != threatlist.end(); ++i)
+        for (ThreatReference const* ref : me->GetThreatMgr().GetUnsortedThreatList())
         {
-            Unit* unit = ObjectAccessor::GetUnit(*me, (*i)->getUnitGuid());
-            if (unit && me->IsWithinMeleeRange(unit))
-                if (!target || unit->GetHealth() > target->GetHealth())
-                    target = unit;
+            if (Unit* unit = ref->GetVictim())
+            {
+                if (me->IsWithinMeleeRange(unit))
+                    if (!target || unit->GetHealth() > target->GetHealth())
+                        target = unit;
+            }
         }
 
         return target;
@@ -189,27 +186,24 @@ struct npc_supremus_punch_invisible_stalker : public ScriptedAI
 {
     npc_supremus_punch_invisible_stalker(Creature* creature) : ScriptedAI(creature) { }
 
-    void IsSummonedBy(WorldObject* /*summoner*/) override
+    void IsSummonedBy(WorldObject* summoner) override
     {
-        me->SetInCombatWithZone();
-        if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
-            me->AddThreat(target, 10000.f);
-
         DoCastSelf(SPELL_MOLTEN_FLAME, true);
+
+        // Trigger creatures cannot have their own threat list, pick the chase target from the summoner's
+        if (Creature* supremus = summoner->ToCreature())
+            if (Unit* target = supremus->AI()->SelectTarget(SelectTargetMethod::Random, 0, 100.0f, true))
+                me->GetMotionMaster()->MoveFollow(target, 0.0f, 0.0f);
 
         scheduler.Schedule(6s, 10s, [this](TaskContext /*context*/)
         {
-            me->CombatStop();
-            me->SetReactState(REACT_PASSIVE);
+            me->GetMotionMaster()->MoveIdle();
         });
     }
 
     void UpdateAI(uint32 diff) override
     {
         scheduler.Update(diff);
-
-        if (!UpdateVictim())
-            return;
     }
 };
 

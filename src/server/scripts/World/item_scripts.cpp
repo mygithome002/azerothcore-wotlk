@@ -1,25 +1,26 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "CreatureScript.h"
+#include "AreaDefines.h"
 #include "ItemScript.h"
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "Spell.h"
+#include "SpellMgr.h"
 
 /*#####
 # item_only_for_flight
@@ -44,25 +45,32 @@ public:
         switch (itemId)
         {
             case 24538:
-                if (player->GetAreaId() != 3628)
+                if (player->GetAreaId() != AREA_HALAA)
                     disabled = true;
                 break;
             case 34489:
-                if (player->GetZoneId() != 4080)
+                if (player->GetZoneId() != AREA_ISLE_OF_QUEL_DANAS)
                     disabled = true;
-                break;
-            case 34475:
-                if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(SPELL_ARCANE_CHARGES))
-                    Spell::SendCastResult(player, spellInfo, 1, SPELL_FAILED_NOT_ON_GROUND);
                 break;
         }
 
         // allow use in flight only
-        if (player->IsInFlight() && !disabled)
-            return false;
+        if (player->IsInFlight())
+        {
+            if (!disabled)
+                return false;	
+        }
+        else // error
+        {
+            if (itemId == 34475)
+            {
+                if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(SPELL_ARCANE_CHARGES))
+                    Spell::SendCastResult(player, spellInfo, 1, SPELL_FAILED_NOT_ON_GROUND);
+            }
+            else
+                player->SendEquipError(EQUIP_ERR_CANT_DO_RIGHT_NOW, item, nullptr);
+        }
 
-        // error
-        player->SendEquipError(EQUIP_ERR_CANT_DO_RIGHT_NOW, item, nullptr);
         return true;
     }
 };
@@ -134,9 +142,7 @@ public:
 
 enum PetrovClusterBombs
 {
-    SPELL_PETROV_BOMB           = 42406,
-    AREA_ID_SHATTERED_STRAITS   = 4064,
-    ZONE_ID_HOWLING             = 495
+    SPELL_PETROV_BOMB           = 42406
 };
 
 class item_petrov_cluster_bombs : public ItemScript
@@ -144,12 +150,12 @@ class item_petrov_cluster_bombs : public ItemScript
 public:
     item_petrov_cluster_bombs() : ItemScript("item_petrov_cluster_bombs") { }
 
-    bool OnUse(Player* player, Item* item, const SpellCastTargets& /*targets*/) override
+    bool OnUse(Player* player, Item* item, SpellCastTargets const& /*targets*/) override
     {
-        if (player->GetZoneId() != ZONE_ID_HOWLING)
+        if (player->GetZoneId() != AREA_HOWLING_FJORD)
             return false;
 
-        if (!player->GetTransport() || player->GetAreaId() != AREA_ID_SHATTERED_STRAITS)
+        if (!player->GetTransport() || player->GetAreaId() != AREA_SHATTERED_STRAITS)
         {
             player->SendEquipError(EQUIP_ERR_NONE, item, nullptr);
 

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -75,6 +75,7 @@ enum LoginDatabaseStatements : uint32
     LOGIN_UPD_LAST_ATTEMPT_IP,
     LOGIN_UPD_ACCOUNT_ONLINE,
     LOGIN_UPD_UPTIME_PLAYERS,
+    LOGIN_UPD_REALM_ONLINE,
     LOGIN_DEL_OLD_LOGS,
     LOGIN_DEL_ACCOUNT_ACCESS,
     LOGIN_DEL_ACCOUNT_ACCESS_BY_REALM,
@@ -85,8 +86,11 @@ enum LoginDatabaseStatements : uint32
     LOGIN_GET_USERNAME_BY_ID,
     LOGIN_SEL_CHECK_PASSWORD,
     LOGIN_SEL_CHECK_PASSWORD_BY_NAME,
+    LOGIN_SEL_ACCOUNT_FLAG,
+    LOGIN_UPD_SET_ACCOUNT_FLAG,
     LOGIN_SEL_PINFO,
     LOGIN_SEL_PINFO_BANS,
+    LOGIN_SEL_ACCOUNT_INFO_DETAILED,
     LOGIN_SEL_GM_ACCOUNTS,
     LOGIN_SEL_ACCOUNT_INFO,
     LOGIN_SEL_ACCOUNT_ACCESS_GMLEVEL_TEST,
@@ -95,10 +99,21 @@ enum LoginDatabaseStatements : uint32
     LOGIN_SEL_BANS,
     LOGIN_SEL_ACCOUNT_WHOIS,
     LOGIN_SEL_REALMLIST_SECURITY_LEVEL,
+    LOGIN_UPD_REALMLIST_SECURITY_LEVEL,
     LOGIN_DEL_ACCOUNT,
     LOGIN_SEL_AUTOBROADCAST,
+    LOGIN_SEL_AUTOBROADCAST_LOCALIZED,
+    LOGIN_INS_AUTOBROADCAST,
+    LOGIN_DEL_AUTOBROADCAST,
+    LOGIN_INS_AUTOBROADCAST_LOCALE,
+    LOGIN_DEL_AUTOBROADCAST_LOCALE,
+    LOGIN_SEL_AUTOBROADCAST_BY_ID,
+    LOGIN_SEL_AUTOBROADCAST_LOCALE_BY_ID,
+    LOGIN_SEL_AUTOBROADCAST_MAX_ID,
     LOGIN_SEL_MOTD,
+    LOGIN_SEL_MOTD_LOCALE,
     LOGIN_REP_MOTD,
+    LOGIN_REP_MOTD_LOCALE,
     LOGIN_SEL_LAST_ATTEMPT_IP,
     LOGIN_SEL_LAST_IP,
     LOGIN_INS_ALDL_IP_LOGGING,
@@ -118,6 +133,16 @@ enum LoginDatabaseStatements : uint32
 
     LOGIN_SEL_ACCOUNT_TOTP_SECRET,
     LOGIN_UPD_ACCOUNT_TOTP_SECRET,
+
+    LOGIN_INS_UPTIME,
+
+    LOGIN_GET_EMAIL_BY_ID,
+
+    // RBAC
+    LOGIN_SEL_RBAC_ACCOUNT_PERMISSIONS,
+    LOGIN_INS_RBAC_ACCOUNT_PERMISSION,
+    LOGIN_DEL_RBAC_ACCOUNT_PERMISSION,
+    LOGIN_SEL_RBAC_DEFAULT_PERMISSIONS,
 
     MAX_LOGINDATABASE_STATEMENTS
 };

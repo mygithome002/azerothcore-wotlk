@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -206,7 +206,7 @@ bool Acore::Hyperlinks::LinkTags::spell::StoreTo(SpellInfo const*& val, std::str
     if (!(t.TryConsumeTo(spellId) && t.IsEmpty()))
         return false;
 
-    return !!(val = sSpellMgr->GetSpellInfo(spellId));
+    return (val = sSpellMgr->GetSpellInfo(spellId));
 }
 
 bool Acore::Hyperlinks::LinkTags::talent::StoreTo(TalentLinkData& val, std::string_view text)
@@ -258,4 +258,14 @@ bool Acore::Hyperlinks::LinkTags::trade::StoreTo(TradeskillLinkData& val, std::s
 
     return (val.Spell && val.Spell->Effects[0].Effect == SPELL_EFFECT_TRADE_SKILL && t.TryConsumeTo(val.CurValue) &&
         t.TryConsumeTo(val.MaxValue) && t.TryConsumeTo(val.Owner) && t.TryConsumeTo(val.KnownRecipes) && t.IsEmpty());
+}
+
+bool Acore::Hyperlinks::LinkTags::found::StoreTo(FoundLinkData& val, std::string_view text)
+{
+    // format is "<rawguid>:<entry>:"
+    if (!text.ends_with(HYPERLINK_DATA_DELIMITER))
+        return false;
+
+    HyperlinkDataTokenizer t(text);
+    return t.TryConsumeTo(val.RawGuid) && t.TryConsumeTo(val.Entry) && t.IsEmpty();
 }

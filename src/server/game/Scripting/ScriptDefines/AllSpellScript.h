@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -24,8 +24,6 @@
 enum AllSpellHook
 {
     ALLSPELLHOOK_ON_CALC_MAX_DURATION,
-    ALLSPELLHOOK_CAN_MOD_AURA_EFFECT_DAMAGE_DONE,
-    ALLSPELLHOOK_CAN_MOD_AURA_EFFECT_MOD_DAMAGE_PERCENT_DONE,
     ALLSPELLHOOK_ON_SPELL_CHECK_CAST,
     ALLSPELLHOOK_CAN_PREPARE,
     ALLSPELLHOOK_CAN_SCALING_EVERYTHING,
@@ -36,6 +34,10 @@ enum AllSpellHook
     ALLSPELLHOOK_ON_DUMMY_EFFECT_GAMEOBJECT,
     ALLSPELLHOOK_ON_DUMMY_EFFECT_CREATURE,
     ALLSPELLHOOK_ON_DUMMY_EFFECT_ITEM,
+    ALLSPELLHOOK_ON_CAST_CANCEL,
+    ALLSPELLHOOK_ON_CAST,
+    ALLSPELLHOOK_ON_PREPARE,
+    ALLSPELLHOOK_ON_IS_AURA_EXCLUSIVE_BY_SPECIFIC_WITH,
     ALLSPELLHOOK_END
 };
 
@@ -45,17 +47,13 @@ enum SpellEffIndex : uint8;
 class AllSpellScript : public ScriptObject
 {
 protected:
-    AllSpellScript(const char* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
+    AllSpellScript(char const* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
 
 public:
     [[nodiscard]] bool IsDatabaseBound() const override { return false; }
 
     // Calculate max duration in applying aura
     virtual void OnCalcMaxDuration(Aura const* /*aura*/, int32& /*maxDuration*/) { }
-
-    [[nodiscard]] virtual bool CanModAuraEffectDamageDone(AuraEffect const* /*auraEff*/, Unit* /*target*/, AuraApplication const* /*aurApp*/, uint8 /*mode*/, bool /*apply*/) { return true; }
-
-    [[nodiscard]] virtual bool CanModAuraEffectModDamagePercentDone(AuraEffect const* /*auraEff*/, Unit* /*target*/, AuraApplication const* /*aurApp*/, uint8 /*mode*/, bool /*apply*/) { return true; }
 
     virtual void OnSpellCheckCast(Spell* /*spell*/, bool /*strict*/, SpellCastResult& /*res*/) { }
 
@@ -70,6 +68,8 @@ public:
     virtual void OnRemoveAuraScaleTargets(Spell* /*spell*/, TargetInfo& /*targetInfo*/, uint8 /*auraScaleMask*/, bool& /*needErase*/) { }
 
     virtual void OnBeforeAuraRankForLevel(SpellInfo const* /*spellInfo*/, SpellInfo const* /*latestSpellInfo*/, uint8 /*level*/) { }
+
+    virtual void OnIsAuraExclusiveBySpecificWith(SpellInfo const* /*spellInfo*/, SpellInfo const* /*otherSpellInfo*/, bool& /*isExclusive*/) { }
 
     /**
      * @brief This hook called after spell dummy effect
@@ -100,6 +100,12 @@ public:
      * @param itemTarget Contains information about the Item
      */
     virtual void OnDummyEffect(WorldObject* /*caster*/, uint32 /*spellID*/, SpellEffIndex /*effIndex*/, Item* /*itemTarget*/) { }
+
+    virtual void OnSpellCastCancel(Spell* /*spell*/, Unit* /*caster*/, SpellInfo const* /*spellInfo*/, bool /*bySelf*/) { }
+
+    virtual void OnSpellCast(Spell* /*spell*/, Unit* /*caster*/, SpellInfo const* /*spellInfo*/, bool /*skipCheck*/) { }
+
+    virtual void OnSpellPrepare(Spell* /*spell*/, Unit* /*caster*/, SpellInfo const* /*spellInfo*/) { }
 };
 
 // Compatibility for old scripts

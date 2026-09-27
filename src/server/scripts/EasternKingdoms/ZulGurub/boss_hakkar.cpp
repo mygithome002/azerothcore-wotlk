@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -223,14 +223,10 @@ class at_zulgurub_entrance_speech : public OnlyOnceAreaTriggerScript
 public:
     at_zulgurub_entrance_speech() : OnlyOnceAreaTriggerScript("at_zulgurub_entrance_speech") {}
 
-    bool _OnTrigger(Player* player, const AreaTrigger* /*at*/) override
+    bool _OnTrigger(Player* player, AreaTrigger const* /*at*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
         {
-            // Instance map's enormous, Hakkar's GRID is not loaded by the time players enter.
-            // Without this, the creature never says anything, because it doesn't load in time.
-            player->GetMap()->LoadGrid(-11783.99f, -1655.27f);
-
             if (Creature* hakkar = ObjectAccessor::GetCreature(*player, instance->GetGuidData(DATA_HAKKAR)))
             {
                 hakkar->setActive(true);
@@ -250,14 +246,10 @@ class at_zulgurub_bridge_speech : public OnlyOnceAreaTriggerScript
 public:
     at_zulgurub_bridge_speech() : OnlyOnceAreaTriggerScript("at_zulgurub_bridge_speech") {}
 
-    bool _OnTrigger(Player* player, const AreaTrigger* /*at*/) override
+    bool _OnTrigger(Player* player, AreaTrigger const* /*at*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
         {
-            // Instance map's enormous, Hakkar's GRID is not loaded by the time players enter.
-           // Without this, the creature never says anything, because it doesn't load in time.
-            player->GetMap()->LoadGrid(-11783.99f, -1655.27f);
-
             if (Creature* hakkar = ObjectAccessor::GetCreature(*player, instance->GetGuidData(DATA_HAKKAR)))
             {
                 if (hakkar->GetAI())
@@ -276,14 +268,10 @@ class at_zulgurub_temple_speech : public OnlyOnceAreaTriggerScript
 public:
     at_zulgurub_temple_speech() : OnlyOnceAreaTriggerScript("at_zulgurub_temple_speech") {}
 
-    bool _OnTrigger(Player* player, const AreaTrigger* /*at*/) override
+    bool _OnTrigger(Player* player, AreaTrigger const* /*at*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
         {
-            // Instance map's enormous, Hakkar's GRID is not loaded by the time players enter.
-           // Without this, the creature never says anything, because it doesn't load in time.
-            player->GetMap()->LoadGrid(-11783.99f, -1655.27f);
-
             if (Creature* hakkar = ObjectAccessor::GetCreature(*player, instance->GetGuidData(DATA_HAKKAR)))
             {
                 if (hakkar->GetAI())
@@ -302,14 +290,10 @@ class at_zulgurub_bloodfire_pit_speech : public OnlyOnceAreaTriggerScript
 public:
     at_zulgurub_bloodfire_pit_speech() : OnlyOnceAreaTriggerScript("at_zulgurub_bloodfire_pit_speech") {}
 
-    bool _OnTrigger(Player* player, const AreaTrigger* /*at*/) override
+    bool _OnTrigger(Player* player, AreaTrigger const* /*at*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
         {
-            // Instance map's enormous, Hakkar's GRID is not loaded by the time players enter.
-           // Without this, the creature never says anything, because it doesn't load in time.
-            player->GetMap()->LoadGrid(-11783.99f, -1655.27f);
-
             if (Creature* hakkar = ObjectAccessor::GetCreature(*player, instance->GetGuidData(DATA_HAKKAR)))
             {
                 if (hakkar->GetAI())
@@ -328,14 +312,10 @@ class at_zulgurub_edge_of_madness_speech : public OnlyOnceAreaTriggerScript
 public:
     at_zulgurub_edge_of_madness_speech() : OnlyOnceAreaTriggerScript("at_zulgurub_edge_of_madness_speech") {}
 
-    bool _OnTrigger(Player* player, const AreaTrigger* /*at*/) override
+    bool _OnTrigger(Player* player, AreaTrigger const* /*at*/) override
     {
         if (InstanceScript* instance = player->GetInstanceScript())
         {
-            // Instance map's enormous, Hakkar's GRID is not loaded by the time players enter.
-           // Without this, the creature never says anything, because it doesn't load in time.
-            player->GetMap()->LoadGrid(-11783.99f, -1655.27f);
-
             if (Creature* hakkar = ObjectAccessor::GetCreature(*player, instance->GetGuidData(DATA_HAKKAR)))
             {
                 if (hakkar->GetAI())
@@ -349,6 +329,7 @@ public:
     }
 };
 
+// 24324 - Blood Siphon (channel)
 class spell_blood_siphon : public SpellScript
 {
     PrepareSpellScript(spell_blood_siphon);
@@ -385,6 +366,32 @@ class spell_blood_siphon : public SpellScript
     }
 };
 
+// 24323 - Blood Siphon (aura) | Effects changed in SpellInfoCorrections
+class spell_blood_siphon_aura : public AuraScript
+{
+    PrepareAuraScript(spell_blood_siphon_aura);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_POISONOUS_BLOOD });
+    }
+
+    void OnRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
+    {
+        if (Unit* target = GetTarget())
+        {
+            if (target->HasAura(SPELL_POISONOUS_BLOOD))
+                target->RemoveAurasDueToSpell(SPELL_POISONOUS_BLOOD);
+        }
+    }
+
+    void Register() override
+    {
+        AfterEffectRemove += AuraEffectRemoveFn(spell_blood_siphon_aura::OnRemove, EFFECT_1, SPELL_AURA_MOD_STUN, AURA_EFFECT_HANDLE_REAL);
+    }
+};
+
+// 24693 - Serverside - Hakkar Power Down
 class spell_hakkar_power_down : public SpellScript
 {
     PrepareSpellScript(spell_hakkar_power_down);
@@ -411,5 +418,6 @@ void AddSC_boss_hakkar()
     new at_zulgurub_bloodfire_pit_speech();
     new at_zulgurub_edge_of_madness_speech();
     RegisterSpellScript(spell_blood_siphon);
+    RegisterSpellScript(spell_blood_siphon_aura);
     RegisterSpellScript(spell_hakkar_power_down);
 }

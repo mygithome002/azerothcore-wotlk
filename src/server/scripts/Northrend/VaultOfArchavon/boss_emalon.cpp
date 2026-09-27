@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -29,10 +29,8 @@ enum Spells
     SPELL_OVERCHARGE                = 64218,
     SPELL_BERSERK                   = 26662,
 
-    SPELL_CHAIN_LIGHTNING_10        = 64213,
-    SPELL_CHAIN_LIGHTNING_25        = 64215,
-    SPELL_LIGHTNING_NOVA_10         = 64216,
-    SPELL_LIGHTNING_NOVA_25         = 65279,
+    SPELL_CHAIN_LIGHTNING           = 64213,
+    SPELL_LIGHTNING_NOVA            = 64216,
 };
 
 enum Events
@@ -53,6 +51,10 @@ enum Misc
     NPC_TEMPEST_MINION              = 33998,
     MAX_TEMPEST_MINIONS             = 4,
 };
+
+// A minion killed mid-fight is replaced next to the boss, not at one of the four start positions
+float constexpr MINION_RESPAWN_MIN_DIST = 5.0f;
+float constexpr MINION_RESPAWN_MAX_DIST = 10.0f;
 
 struct Position TempestMinions[MAX_TEMPEST_MINIONS] =
 {
@@ -126,6 +128,13 @@ public:
             events.ScheduleEvent(EVENT_SUMMON_NEXT_MINION, 4s);
         }
 
+        // Called by Creature::DespawnOnEvade (CREATURE_FLAG_EXTRA_HARD_RESET) after Reset() already
+        // summoned a fresh set of minions; without this they outlive the boss and stack up per wipe.
+        void SummonedCreatureDespawnAll() override
+        {
+            summons.DespawnAll();
+        }
+
         void SpellHitTarget(Unit* target, SpellInfo const* spellInfo) override
         {
             // restore minions health
@@ -171,11 +180,11 @@ public:
             {
                 case EVENT_CHAIN_LIGHTNING:
                     if (Unit* target = SelectTarget(SelectTargetMethod::Random, 0))
-                        me->CastSpell(target, RAID_MODE(SPELL_CHAIN_LIGHTNING_10, SPELL_CHAIN_LIGHTNING_25), false);
+                        me->CastSpell(target, SPELL_CHAIN_LIGHTNING, false);
                     events.Repeat(25s);
                     break;
                 case EVENT_LIGHTNING_NOVA:
-                    me->CastSpell(me, RAID_MODE(SPELL_LIGHTNING_NOVA_10, SPELL_LIGHTNING_NOVA_25), false);
+                    me->CastSpell(me, SPELL_LIGHTNING_NOVA, false);
                     events.Repeat(40s);
                     break;
                 case EVENT_OVERCHARGE:
@@ -189,8 +198,20 @@ public:
                     Talk(EMOTE_BERSERK);
                     break;
                 case EVENT_SUMMON_NEXT_MINION:
-                    me->SummonCreature(NPC_TEMPEST_MINION, TempestMinions[urand(0, 3)], TEMPSUMMON_CORPSE_DESPAWN, 0);
+                {
+                    float const dist = frand(MINION_RESPAWN_MIN_DIST, MINION_RESPAWN_MAX_DIST);
+                    Position const pos = me->GetNearPosition(dist, frand(0.0f, static_cast<float>(2 * M_PI)));
+                    // the replacement has to join the fight on its own instead of idling until a
+                    // player walks into its aggro range
+                    if (Creature* minion = me->SummonCreature(NPC_TEMPEST_MINION, pos, TEMPSUMMON_CORPSE_DESPAWN, 0))
+                    {
+                        DoZoneInCombat(minion);
+                        if (Unit* victim = me->GetVictim())
+                            minion->AI()->AttackStart(victim);
+                    }
+                    Talk(EMOTE_MINION_RESPAWN);
                     break;
+                }
                 default:
                     break;
             }
@@ -205,69 +226,52 @@ public:
     }
 };
 
-class spell_voa_overcharge : public SpellScriptLoader
+class spell_voa_overcharge_aura : public AuraScript
 {
-public:
-    spell_voa_overcharge() : SpellScriptLoader("spell_voa_overcharge") { }
+    PrepareAuraScript(spell_voa_overcharge_aura);
 
-    class spell_voa_overcharge_AuraScript : public AuraScript
+    bool Validate(SpellInfo const* /*spellInfo*/) override
     {
-        PrepareAuraScript(spell_voa_overcharge_AuraScript);
+        return ValidateSpellInfo({ SPELL_OVERCHARGED_BLAST });
+    }
 
-        void HandlePeriodicDummy(AuraEffect const*  /*aurEff*/)
+    void HandlePeriodicDummy(AuraEffect const*  /*aurEff*/)
+    {
+        Unit* target = GetTarget();
+        if (target->IsCreature() && GetAura()->GetStackAmount() >= 10)
         {
-            Unit* target = GetTarget();
-            if (target->IsCreature() && GetAura()->GetStackAmount() >= 10)
-            {
-                target->CastSpell(target, SPELL_OVERCHARGED_BLAST, true);
-                Unit::Kill(target, target, false);
-            }
-
-            PreventDefaultAction();
+            target->CastSpell(target, SPELL_OVERCHARGED_BLAST, true);
+            Unit::Kill(target, target, false);
         }
 
-        void Register() override
-        {
-            OnEffectPeriodic += AuraEffectPeriodicFn(spell_voa_overcharge_AuraScript::HandlePeriodicDummy, EFFECT_2, SPELL_AURA_PERIODIC_DUMMY);
-        }
-    };
+        PreventDefaultAction();
+    }
 
-    AuraScript* GetAuraScript() const override
+    void Register() override
     {
-        return new spell_voa_overcharge_AuraScript();
+        OnEffectPeriodic += AuraEffectPeriodicFn(spell_voa_overcharge_aura::HandlePeriodicDummy, EFFECT_2, SPELL_AURA_PERIODIC_DUMMY);
     }
 };
 
-class spell_voa_lightning_nova : public SpellScriptLoader
+class spell_voa_lightning_nova : public SpellScript
 {
-public:
-    spell_voa_lightning_nova() : SpellScriptLoader("spell_voa_lightning_nova") { }
+    PrepareSpellScript(spell_voa_lightning_nova);
 
-    class spell_voa_lightning_nova_SpellScript : public SpellScript
+    void HandleOnHit()
     {
-        PrepareSpellScript(spell_voa_lightning_nova_SpellScript);
-
-        void HandleOnHit()
+        int32 damage = 0;
+        if (Unit* target = GetHitUnit())
         {
-            int32 damage = 0;
-            if (Unit* target = GetHitUnit())
-            {
-                float dist = target->GetDistance(GetCaster());
-                damage = int32(GetHitDamage() * (70.0f - std::min(70.0f, dist)) / 70.0f);
-            }
-
-            SetHitDamage(damage);
+            float dist = target->GetDistance(GetCaster());
+            damage = int32(GetHitDamage() * (70.0f - std::min(70.0f, dist)) / 70.0f);
         }
 
-        void Register() override
-        {
-            OnHit += SpellHitFn(spell_voa_lightning_nova_SpellScript::HandleOnHit);
-        }
-    };
+        SetHitDamage(damage);
+    }
 
-    SpellScript* GetSpellScript() const override
+    void Register() override
     {
-        return new spell_voa_lightning_nova_SpellScript();
+        OnHit += SpellHitFn(spell_voa_lightning_nova::HandleOnHit);
     }
 };
 
@@ -275,6 +279,6 @@ void AddSC_boss_emalon()
 {
     new boss_emalon();
 
-    new spell_voa_overcharge();
-    new spell_voa_lightning_nova();
+    RegisterSpellScript(spell_voa_overcharge_aura);
+    RegisterSpellScript(spell_voa_lightning_nova);
 }

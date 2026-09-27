@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -19,22 +19,22 @@ class MMapTargetData
 {
 public:
     MMapTargetData() = default;
-    MMapTargetData(uint32 endTime, const Position* o, const Position* t)
+    MMapTargetData(uint32 endTime, Position const* o, Position const* t)
     {
         _endTime = endTime;
         _posOwner.Relocate(o);
         _posTarget.Relocate(t);
     }
-    MMapTargetData(const MMapTargetData& c)
+    MMapTargetData(MMapTargetData const& c)
     {
         _endTime = c._endTime;
         _posOwner.Relocate(c._posOwner);
         _posTarget.Relocate(c._posTarget);
     }
     MMapTargetData(MMapTargetData&&) = default;
-    MMapTargetData& operator=(const MMapTargetData&) = default;
+    MMapTargetData& operator=(MMapTargetData const&) = default;
     MMapTargetData& operator=(MMapTargetData&&) = default;
-    [[nodiscard]] bool PosChanged(const Position& o, const Position& t) const
+    [[nodiscard]] bool PosChanged(Position const& o, Position const& t) const
     {
         return _posOwner.GetExactDistSq(&o) > 0.5f * 0.5f || _posTarget.GetExactDistSq(&t) > 0.5f * 0.5f;
     }
@@ -47,7 +47,7 @@ class SafeUnitPointer
 {
 public:
     explicit SafeUnitPointer(Unit* defVal) : ptr(defVal), defaultValue(defVal) {}
-    SafeUnitPointer(const SafeUnitPointer& /*p*/) { ABORT(); }
+    SafeUnitPointer(SafeUnitPointer const& /*p*/) { ABORT(); }
     void Initialize(Unit* defVal) { defaultValue = defVal; ptr = defVal; }
     ~SafeUnitPointer();
     void SetPointedTo(Unit* u);

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,6 +22,7 @@
 #include "Player.h"
 #include "ScriptedCreature.h"
 #include "SpellAuras.h"
+#include "World.h"
 #include "vault_of_archavon.h"
 
 /* Vault of Archavon encounters:
@@ -34,7 +35,7 @@
 class instance_vault_of_archavon : public InstanceMapScript
 {
 public:
-    instance_vault_of_archavon() : InstanceMapScript("instance_vault_of_archavon", 624) { }
+    instance_vault_of_archavon() : InstanceMapScript("instance_vault_of_archavon", MAP_VAULT_OF_ARCHAVON) { }
 
     struct instance_vault_of_archavon_InstanceMapScript : public InstanceScript
     {
@@ -73,6 +74,8 @@ public:
             if (checkTimer >= 60000)
             {
                 checkTimer -= 60000; // one minute
+                if (!sWorld->getBoolConfig(CONFIG_WINTERGRASP_KICK_VOA_PLAYERS))
+                    return;
                 if (Battlefield* bf = sBattlefieldMgr->GetBattlefieldByBattleId(BATTLEFIELD_BATTLEID_WG))
                 {
                     if (!bf->IsWarTime())
@@ -133,6 +136,9 @@ public:
                 if (m_auiEncounter[i] == IN_PROGRESS)
                     return true;
 
+            if (!sWorld->getBoolConfig(CONFIG_WINTERGRASP_KICK_VOA_PLAYERS))
+                return false;
+
             Battlefield* bf = sBattlefieldMgr->GetBattlefieldByBattleId(BATTLEFIELD_BATTLEID_WG);
             if (!bf || bf->IsWarTime() || bf->GetTimer() <= 10 * MINUTE * IN_MILLISECONDS)
                 return true;
@@ -176,7 +182,7 @@ public:
 
         void SetData(uint32 type, uint32 data) override
         {
-            switch(type)
+            switch (type)
             {
                 case EVENT_ARCHAVON:
                 case EVENT_EMALON:

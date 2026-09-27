@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -17,6 +17,7 @@
 
 #include "Corpse.h"
 #include "CharacterCache.h"
+#include "DBCStores.h"
 #include "Common.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
@@ -26,7 +27,7 @@
 #include "UpdateMask.h"
 #include "World.h"
 
-Corpse::Corpse(CorpseType type) : WorldObject(type != CORPSE_BONES), m_type(type)
+Corpse::Corpse(CorpseType type) : WorldObject(), m_type(type)
 {
     m_objectType |= TYPEMASK_CORPSE;
     m_objectTypeId = TYPEID_CORPSE;
@@ -56,6 +57,15 @@ void Corpse::RemoveFromWorld()
         GetMap()->GetObjectsStore().Remove<Corpse>(GetGUID());
 
     WorldObject::RemoveFromWorld();
+}
+
+uint32 Corpse::GetFaction() const
+{
+    // inherit faction from player race
+    uint32 const race = GetByteValue(CORPSE_FIELD_BYTES_1, 1);
+
+    ChrRacesEntry const* rEntry = sChrRacesStore.LookupEntry(race);
+    return rEntry ? rEntry->FactionID : 0;
 }
 
 bool Corpse::Create(ObjectGuid::LowType guidlow)
@@ -121,7 +131,7 @@ void Corpse::DeleteFromDB(CharacterDatabaseTransaction trans)
     DeleteFromDB(GetOwnerGUID(), trans);
 }
 
-void Corpse::DeleteFromDB(ObjectGuid const ownerGuid, CharacterDatabaseTransaction trans)
+void Corpse::DeleteFromDB(ObjectGuid const& ownerGuid, CharacterDatabaseTransaction trans)
 {
     CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_DEL_CORPSE);
     stmt->SetData(0, ownerGuid.GetCounter());

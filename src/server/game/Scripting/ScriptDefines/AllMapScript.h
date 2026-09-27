@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -19,11 +19,25 @@
 #define SCRIPT_OBJECT_ALL_MAP_SCRIPT_H_
 
 #include "ScriptObject.h"
+#include <vector>
+
+enum AllMapHook
+{
+    ALLMAPHOOK_ON_PLAYER_ENTER_ALL,
+    ALLMAPHOOK_ON_PLAYER_LEAVE_ALL,
+    ALLMAPHOOK_ON_BEFORE_CREATE_INSTANCE_SCRIPT,
+    ALLMAPHOOK_ON_DESTROY_INSTANCE,
+    ALLMAPHOOK_ON_CREATE_MAP,
+    ALLMAPHOOK_ON_DESTROY_MAP,
+    ALLMAPHOOK_ON_MAP_UPDATE,
+    ALLMAPHOOK_CAN_SEND_OBJECT_UPDATES_TO_PLAYER,
+    ALLMAPHOOK_END
+};
 
 class AllMapScript : public ScriptObject
 {
 protected:
-    AllMapScript(const char* name);
+    AllMapScript(char const* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
 
 public:
     /**
@@ -82,6 +96,15 @@ public:
      * @param diff Contains information about the diff time
      */
     virtual void OnMapUpdate(Map* /*map*/, uint32 /*diff*/) { }
+
+    /**
+     * @brief This hook is called before the map sends its pending object update packets to a player
+     *
+     * @param map Contains information about the Map
+     * @param player Contains information about the Player
+     * @return True to send the updates, false to discard them for this player
+     */
+    [[nodiscard]] virtual bool CanSendObjectUpdatesToPlayer(Map* /*map*/, Player* /*player*/) { return true; }
 };
 
 #endif

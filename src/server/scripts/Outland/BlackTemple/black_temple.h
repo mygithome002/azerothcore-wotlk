@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -42,7 +42,8 @@ enum DataTypes
     DATA_GATHIOS_THE_SHATTERER      = 12,
     DATA_HIGH_NETHERMANCER_ZEREVOR  = 13,
     DATA_LADY_MALANDE               = 14,
-    DATA_VERAS_DARKSHADOW           = 15
+    DATA_VERAS_DARKSHADOW           = 15,
+    DATA_BLACK_TEMPLE_TRIGGER       = 16
 };
 
 enum CreatureIds
@@ -82,7 +83,8 @@ enum CreatureIds
     NPC_ASHTONGUE_STALKER           = 23374,
     NPC_STORM_FURY                  = 22848,
 
-    NPC_DRAGON_TURTLE               = 22885
+    NPC_DRAGON_TURTLE               = 22885,
+    NPC_BLACK_TEMPLE_TRIGGER        = 22984
 };
 
 enum GameObjectIds
@@ -111,6 +113,12 @@ enum MiscIds
     SPELL_DEMENTIA1                 = 41406,
     SPELL_DEMENTIA2                 = 41409,
     SPELL_SUMMON_SHADOWFIENDS       = 41159
+};
+
+enum Texts
+{
+    EMOTE_NAJENTUS_DEFEATED           = 0,
+    EMOTE_LOWER_TEMPLE_DEFEATED       = 1
 };
 
 template <class AI, class T>

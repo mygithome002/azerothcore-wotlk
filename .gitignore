@@ -2,6 +2,7 @@
 # AzerothCore
 #
 
+.cache
 /conf/*
 !/conf/dist
 /modules/*
@@ -18,6 +19,7 @@
 !/env/dist/.gitkeep
 /env/user/*
 /.env*
+/e2e/.env
 /apps/joiner
 /deps/deno
 /data/sql/custom/*
@@ -28,6 +30,9 @@
 /*.override.yaml
 
 !.gitkeep
+
+# default build directory if not specified by CMAKE configuration
+/out/*
 
 #
 #Generic
@@ -51,6 +56,20 @@ CMakeLists.txt.user
 *.LOCAL.*
 
 #
+# Agents
+#
+.agents/plans/**
+
+#
+# Claude
+#
+.claude/worktrees
+.claude/settings.local.json
+.claude/plans/**
+.claude/.cc-writes/
+CLAUDE.local.md
+
+#
 # IDE & other software
 #
 /.settings/
@@ -63,6 +82,13 @@ nbproject/
 .idea
 cmake-build-*/*
 coverage-report/
+.vs
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 #
 # Eclipse
@@ -80,6 +106,14 @@ local.properties
 .project
 .cproject
 
+# vcpkg integration
+/vcpkg/
+/vcpkg-ports/
+
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+
 
 # ==================
 #
@@ -93,6 +127,13 @@ local.properties
 #
 # ==================
 
+# Live-stack e2e private / local tooling (scratch tests stay uncommitted)
+e2e/local/**
+!e2e/local/README.md
+e2e/go.work
+e2e/go.work.sum
+
 #NPCBots
+!/data/sql/custom/db_auth/
 !/data/sql/custom/db_characters/
 !/data/sql/custom/db_world/

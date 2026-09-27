@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -73,7 +73,7 @@ public:
         void UpdateAI(uint32 diff) override
         {
             events.Update(diff);
-            switch(events.ExecuteEvent())
+            switch (events.ExecuteEvent())
             {
                 case 0:
                     break;
@@ -341,7 +341,7 @@ public:
 
                                     Unit::Kill(c, c, false);
                                 }
-                                c->DespawnOrUnsummon(10000);
+                                c->DespawnOrUnsummon(10s);
                             }
                         pInstance->SetData(DATA_INSTANCE_PROGRESS, INSTANCE_PROGRESS_FINISHED_INTRO);
                     }
@@ -469,7 +469,7 @@ public:
             if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
 
-            switch(events.ExecuteEvent())
+            switch (events.ExecuteEvent())
             {
                 case 0:
                     break;
@@ -521,7 +521,7 @@ public:
         {
             if (type != POINT_MOTION_TYPE)
                 return;
-            switch(id)
+            switch (id)
             {
                 case 1:
                     events.RescheduleEvent(id, 0ms);
@@ -532,7 +532,7 @@ public:
         void UpdateAI(uint32 diff) override
         {
             events.Update(diff);
-            switch(events.ExecuteEvent())
+            switch (events.ExecuteEvent())
             {
                 case 0:
                     break;
@@ -551,7 +551,7 @@ public:
                         while (FBSData[i].entry)
                         {
                             if (Creature* c = me->SummonCreature(FBSData[i].entry, 688.69f + i * 1.8f, FBSSpawnPos.GetPositionY() + (float)irand(-2, 2), FBSSpawnPos.GetPositionZ(), 3 * M_PI / 2))
-                                c->GetMotionMaster()->MovePath(FBSData[i].pathId, false);
+                                c->GetMotionMaster()->MoveWaypoint(FBSData[i].pathId, false);
                             ++i;
                         }
                         events.RescheduleEvent(2, 3s);
@@ -674,14 +674,14 @@ public:
             switch (events.ExecuteEvent())
             {
                 case 1:
-                    me->GetMotionMaster()->MovePoint(2, PTSTyrannusWaitPos1, false);
+                    me->GetMotionMaster()->MovePoint(2, PTSTyrannusWaitPos1, FORCED_MOVEMENT_NONE, 0.f, false);
                     break;
                 case 2:
                     me->SetFacingTo(PTSTyrannusWaitPos1.GetOrientation());
                     me->setActive(false);
                     break;
                 case 3:
-                    me->GetMotionMaster()->MovePoint(3, PTSTyrannusWaitPos2, false);
+                    me->GetMotionMaster()->MovePoint(3, PTSTyrannusWaitPos2, FORCED_MOVEMENT_NONE, 0.f, false);
                     break;
                 case 4:
                     me->SetFacingTo(PTSTyrannusWaitPos2.GetOrientation());
@@ -690,7 +690,7 @@ public:
                     me->GetMotionMaster()->MoveTakeoff(10, me->GetPositionX() + 2.0f * cos(me->GetOrientation()), me->GetPositionY() + 2.0f * std::sin(me->GetOrientation()), me->GetPositionZ() + 30.0f, 7.0f);
                     break;
                 case 6:
-                    me->GetMotionMaster()->MovePoint(4, PTSTyrannusWaitPos3, false);
+                    me->GetMotionMaster()->MovePoint(4, PTSTyrannusWaitPos3, FORCED_MOVEMENT_NONE, 0.f, false);
                     break;
                 case 30:
                     {
@@ -1013,7 +1013,7 @@ public:
         {
             events.Update(diff);
 
-            switch(events.ExecuteEvent())
+            switch (events.ExecuteEvent())
             {
                 case 0:
                     break;
@@ -1082,7 +1082,7 @@ public:
                                     s->AddThreat(c, 0.0f);
                                 }
                         }
-                    events.RescheduleEvent(10, 3000);
+                    events.RescheduleEvent(10, 3s);
                     break;
             }
 
@@ -1198,18 +1198,18 @@ public:
             if (type != WAYPOINT_MOTION_TYPE)
                 return;
 
-            switch(id)
+            switch (id)
             {
-                case 0:
+                case 1:
                     Talk(me->GetEntry() == NPC_JAINA_PART2 ? SAY_JAINA_OUTRO_2 : SAY_SYLVANAS_OUTRO_2);
                     break;
-                case 1:
+                case 2:
                     if (me->GetEntry() == NPC_JAINA_PART2)
                     {
                         Talk(SAY_JAINA_OUTRO_3);
                     }
                     break;
-                case 6:
+                case 7:
                     me->SetNpcFlag(UNIT_NPC_FLAG_QUESTGIVER);
                     if (GameObject* g = me->FindNearestGameObject(GO_HOR_PORTCULLIS, 50.0f))
                         g->SetGoState(GO_STATE_ACTIVE);
@@ -1221,7 +1221,7 @@ public:
         {
             events.Update(diff);
 
-            switch(events.ExecuteEvent())
+            switch (events.ExecuteEvent())
             {
                 case 0:
                     break;
@@ -1284,7 +1284,7 @@ public:
                     events.RescheduleEvent(8, 2s);
                     break;
                 case 8:
-                    me->GetMotionMaster()->MovePath(me->GetEntry() == NPC_JAINA_PART2 ? PATH_BEGIN_VALUE + 16 : PATH_BEGIN_VALUE + 17, false);
+                    me->GetMotionMaster()->MoveWaypoint(me->GetEntry() == NPC_JAINA_PART2 ? PATH_BEGIN_VALUE + 16 : PATH_BEGIN_VALUE + 17, false);
                     break;
                 case 10:
                     if (Creature* x = pInstance->instance->GetCreature(pInstance->GetGuidData(DATA_MARTIN_OR_GORKUN_GUID)))
@@ -1355,7 +1355,7 @@ public:
             }
         }
         if (minDist < 200.0f * 200.0f)
-            _owner.GetMotionMaster()->MovePoint(0, slaveFreePos[pointId], true, false);
+            _owner.GetMotionMaster()->MovePoint(0, slaveFreePos[pointId], FORCED_MOVEMENT_NONE, 0.f, true, false);
         return true;
     }
 
@@ -1381,9 +1381,9 @@ class spell_pos_slave_trigger_closest : public SpellScript
                         target->SetUInt32Value(UNIT_NPC_EMOTESTATE, 0);
                         if (Creature* c = target->ToCreature())
                         {
-                            c->DespawnOrUnsummon(7000);
+                            c->DespawnOrUnsummon(7s);
                             c->AI()->Talk(0, p);
-                            c->m_Events.AddEvent(new SlaveRunEvent(*c), c->m_Events.CalculateTime(3000));
+                            c->m_Events.AddEventAtOffset(new SlaveRunEvent(*c), 3s);
                         }
                     }
             }
@@ -1406,7 +1406,7 @@ class spell_pos_rimefang_frost_nova : public SpellScript
             {
                 Unit::Kill(caster, target);
                 if (target->IsCreature())
-                    target->ToCreature()->DespawnOrUnsummon(30000);
+                    target->ToCreature()->DespawnOrUnsummon(30s);
             }
     }
 
@@ -1464,7 +1464,7 @@ class at_tyrannus_event_starter : public AreaTriggerScript
 public:
     at_tyrannus_event_starter() : AreaTriggerScript("at_tyrannus_event_starter") { }
 
-    bool OnTrigger(Player* player, const AreaTrigger* /*at*/) override
+    bool OnTrigger(Player* player, AreaTrigger const* /*at*/) override
     {
         InstanceScript* inst = player->GetInstanceScript();
         if (!inst)

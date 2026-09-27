@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -28,7 +28,6 @@
 #include "Pet.h"
 #include "PetPackets.h"
 #include "Player.h"
-#include "QueryHolder.h"
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
@@ -210,7 +209,7 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                 case COMMAND_ATTACK:                        //spellId=1792  //ATTACK
                     {
                         // Can't attack if owner is pacified
-                        if (_player->HasAuraType(SPELL_AURA_MOD_PACIFY))
+                        if (_player->HasPacifyAura())
                         {
                             //pet->SendPetCastFail(spellId, SPELL_FAILED_PACIFIED);
                             //TODO: Send proper error message to client
@@ -232,19 +231,9 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                                 if (!creaturePet->CanCreatureAttack(TargetUnit))
                                     return;
 
-                        // Not let attack through obstructions
-                        bool checkLos = !DisableMgr::IsPathfindingEnabled(pet->GetMap()) ||
-                                        (TargetUnit->IsCreature() && (TargetUnit->ToCreature()->isWorldBoss() || TargetUnit->ToCreature()->IsDungeonBoss()));
-
-                        if (checkLos && !pet->IsWithinLOSInMap(TargetUnit))
-                        {
-                            WorldPacket data(SMSG_CAST_FAILED, 1 + 4 + 1);
-                            data << uint8(0);
-                            data << uint32(7389);
-                            data << uint8(SPELL_FAILED_LINE_OF_SIGHT);
-                            SendPacket(&data);
+                        // Don't bother if pet is already attacking target
+                        if (pet->GetVictim() == TargetUnit && pet->GetCharmInfo()->IsCommandAttack())
                             return;
-                        }
 
                         pet->ClearUnitState(UNIT_STATE_FOLLOW);
                         // This is true if pet has no target or has target but targets differs.
@@ -263,8 +252,8 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                                 pet->ToCreature()->AI()->AttackStart(TargetUnit);
 
                                 //10% chance to play special pet attack talk, else growl
-                                if (pet->IsPet() && ((Pet*)pet)->getPetType() == SUMMON_PET && pet != TargetUnit && urand(0, 100) < 10)
-                                    pet->SendPetTalk((uint32)PET_TALK_ATTACK);
+                                if (pet->IsPet() && pet->ToPet()->getPetType() == SUMMON_PET && pet != TargetUnit && roll_chance_i(10))
+                                    pet->SendPetActionSound(PET_ACTION_ATTACK);
                                 else
                                 {
                                     // 90% chance for pet and 100% chance for charmed creature
@@ -298,10 +287,13 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                             if (pet->ToPet()->getPetType() == HUNTER_PET)
                                 GetPlayer()->RemovePet(pet->ToPet(), PET_SAVE_AS_DELETED);
                             else
+                            {
+                                pet->SendPetDismissSound();
                                 //dismissing a summoned pet is like killing them (this prevents returning a soulshard...)
                                 pet->setDeathState(DeathState::Corpse);
+                            }
                         }
-                        else if (pet->HasUnitTypeMask(UNIT_MASK_MINION | UNIT_MASK_SUMMON | UNIT_MASK_GUARDIAN | UNIT_MASK_CONTROLABLE_GUARDIAN))
+                        else if (pet->HasUnitTypeMask(UNIT_MASK_MINION | UNIT_MASK_SUMMON | UNIT_MASK_GUARDIAN | UNIT_MASK_CONTROLLABLE_GUARDIAN))
                         {
                             pet->ToTempSummon()->UnSummon();
                         }
@@ -414,8 +406,8 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
 
                     //10% chance to play special pet attack talk, else growl
                     //actually this only seems to happen on special spells, fire shield for imp, torment for voidwalker, but it's stupid to check every spell
-                    if (pet->IsPet() && (((Pet*)pet)->getPetType() == SUMMON_PET) && (pet != unit_target) && (urand(0, 100) < 10))
-                        pet->SendPetTalk((uint32)PET_TALK_SPECIAL_SPELL);
+                    if (pet->IsPet() && (pet->ToPet()->getPetType() == SUMMON_PET) && (pet != unit_target) && roll_chance_i(10))
+                        pet->SendPetActionSound(PET_ACTION_SPECIAL_SPELL);
                     else
                     {
                         pet->SendPetAIReaction(guid1);
@@ -426,15 +418,26 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                         // This is true if pet has no target or has target but targets differs.
                         if (pet->GetVictim() != unit_target)
                         {
-                            if (pet->ToCreature()->IsAIEnabled)
-                                pet->ToCreature()->AI()->AttackStart(unit_target);
+                            pet->ToCreature()->AI()->AttackStart(unit_target);
                         }
                     }
 
                     spell->prepare(&(spell->m_targets));
 
-                    charmInfo->SetForcedSpell(0);
-                    charmInfo->SetForcedTargetGUID();
+                    // Stop the current spline before the next movement update can interrupt a stationary channel.
+                    if (Pet* controlledPet = pet->ToPet())
+                        if (spellInfo->IsChanneled() && !spellInfo->IsActionAllowedChannel()
+                            && controlledPet->IsMovementPreventedByCasting())
+                            controlledPet->StopMoving();
+
+                    // spell->prepare() can delete charm info.
+                    // Let's refresh the pointer.
+                    charmInfo = pet->GetCharmInfo();
+                    if (charmInfo)
+                    {
+                        charmInfo->SetForcedSpell(0);
+                        charmInfo->SetForcedTargetGUID();
+                    }
                 }
                 else if (pet->ToPet() && (result == SPELL_FAILED_LINE_OF_SIGHT || result == SPELL_FAILED_OUT_OF_RANGE))
                 {
@@ -442,7 +445,10 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                     bool haspositiveeffect = false;
 
                     if (!unit_target)
+                    {
+                        delete spell;
                         return;
+                    }
 
                     // search positive effects for spell
                     for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
@@ -456,20 +462,29 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
 
                     if (pet->isPossessed() || pet->IsVehicle())
                         Spell::SendCastResult(GetPlayer(), spellInfo, 0, result);
+                    else if (charmInfo->HasCommandState(COMMAND_STAY))
+                        spell->SendPetCastResult(result);
                     else if (GetPlayer()->IsFriendlyTo(unit_target) && !haspositiveeffect)
                         spell->SendPetCastResult(SPELL_FAILED_TARGET_FRIENDLY);
                     else
                         spell->SendPetCastResult(SPELL_FAILED_DONT_REPORT);
 
                     if (!pet->HasSpellCooldown(spellId))
-                        if(pet->ToPet())
+                        if (pet->ToPet())
                             pet->ToPet()->RemoveSpellCooldown(spellId, true);
 
                     spell->finish(false);
                     delete spell;
 
-                    if (_player->HasAuraType(SPELL_AURA_MOD_PACIFY))
+                    if (_player->HasPacifyAura())
                         return;
+
+                    if (charmInfo->HasCommandState(COMMAND_STAY))
+                    {
+                        charmInfo->SetForcedSpell(0);
+                        charmInfo->SetForcedTargetGUID();
+                        return;
+                    }
 
                     bool tempspellIsPositive = false;
 
@@ -501,8 +516,8 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
 
                                 pet->ToCreature()->AI()->AttackStart(TargetUnit);
 
-                                if (pet->IsPet() && ((Pet*)pet)->getPetType() == SUMMON_PET && pet != TargetUnit && urand(0, 100) < 10)
-                                    pet->SendPetTalk((uint32)PET_TALK_SPECIAL_SPELL);
+                                if (pet->IsPet() && pet->ToPet()->getPetType() == SUMMON_PET && pet != TargetUnit && roll_chance_i(10))
+                                    pet->SendPetActionSound(PET_ACTION_SPECIAL_SPELL);
                                 else
                                     pet->SendPetAIReaction(guid1);
                             }
@@ -550,8 +565,8 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
 
                             pet->GetMotionMaster()->MoveFollow(unit_target, PET_FOLLOW_DIST, rand_norm() * 2 * M_PI);
 
-                            if (pet->IsPet() && ((Pet*)pet)->getPetType() == SUMMON_PET && pet != unit_target && urand(0, 100) < 10)
-                                pet->SendPetTalk((uint32)PET_TALK_SPECIAL_SPELL);
+                            if (pet->IsPet() && pet->ToPet()->getPetType() == SUMMON_PET && pet != unit_target && roll_chance_i(10))
+                                pet->SendPetActionSound(PET_ACTION_SPECIAL_SPELL);
                             else
                             {
                                 pet->SendPetAIReaction(guid1);
@@ -568,7 +583,7 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                 else
                 {
                     // dont spam alerts
-                    if (!charmInfo->GetForcedSpell())
+                    if (charmInfo->HasCommandState(COMMAND_STAY) || !charmInfo->GetForcedSpell())
                     {
                         if (pet->isPossessed() || pet->IsVehicle())
                             Spell::SendCastResult(GetPlayer(), spellInfo, 0, result);
@@ -583,7 +598,13 @@ void WorldSession::HandlePetActionHelper(Unit* pet, ObjectGuid guid1, uint32 spe
                     delete spell;
 
                     // reset specific flags in case of spell fail. AI will reset other flags
-                    pet->PetSpellFail(spellInfo, unit_target, result);
+                    if (charmInfo->HasCommandState(COMMAND_STAY))
+                    {
+                        charmInfo->SetForcedSpell(0);
+                        charmInfo->SetForcedTargetGUID();
+                    }
+                    else
+                        pet->PetSpellFail(spellInfo, unit_target, result);
                 }
                 break;
             }
@@ -654,7 +675,7 @@ bool WorldSession::CheckStableMaster(ObjectGuid guid)
     // spell case or GM
     if (guid == GetPlayer()->GetGUID())
     {
-        if (!GetPlayer()->IsGameMaster() && !GetPlayer()->HasAuraType(SPELL_AURA_OPEN_STABLE))
+        if (!GetPlayer()->IsGameMaster() && !GetPlayer()->HasOpenStableAura())
         {
             LOG_DEBUG("network.opcode", "Player ({}) attempt open stable in cheating way.", guid.ToString());
             return false;
@@ -1051,8 +1072,8 @@ void WorldSession::HandlePetCastSpellOpcode(WorldPacket& recvPacket)
             {
                 // 10% chance to play special pet attack talk, else growl
                 // actually this only seems to happen on special spells, fire shield for imp, torment for voidwalker, but it's stupid to check every spell
-                if (pet->getPetType() == SUMMON_PET && (urand(0, 100) < 10))
-                    pet->SendPetTalk(PET_TALK_SPECIAL_SPELL);
+                if (pet->getPetType() == SUMMON_PET && roll_chance_i(10))
+                    pet->SendPetActionSound(PET_ACTION_SPECIAL_SPELL);
                 else
                     pet->SendPetAIReaction(guid);
             }
@@ -1088,7 +1109,7 @@ void WorldSession::HandlePetCastSpellOpcode(WorldPacket& recvPacket)
         caster->AddUnitState(UNIT_STATE_FOLLOW);
 }
 
-void WorldSession::SendPetNameInvalid(uint32 error, const std::string& name, DeclinedName* declinedName)
+void WorldSession::SendPetNameInvalid(uint32 error, std::string const& name, DeclinedName* declinedName)
 {
     WorldPacket data(SMSG_PET_NAME_INVALID, 4 + name.size() + 1 + 1);
     data << uint32(error);

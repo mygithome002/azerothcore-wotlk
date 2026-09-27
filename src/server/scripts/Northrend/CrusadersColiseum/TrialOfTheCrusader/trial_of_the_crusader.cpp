@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -36,15 +36,15 @@ public:
 
     bool OnGossipHello(Player* player, Creature* creature) override
     {
-        if(!creature->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP))
+        if (!creature->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP))
             return true;
 
         InstanceScript* pInstance = creature->GetInstanceScript();
-        if(!pInstance)
+        if (!pInstance)
             return true;
 
         uint32 gossipTextId = 0;
-        switch(pInstance->GetData(TYPE_INSTANCE_PROGRESS))
+        switch (pInstance->GetData(TYPE_INSTANCE_PROGRESS))
         {
             case INSTANCE_PROGRESS_INITIAL:
                 gossipTextId = MSG_TESTED;
@@ -72,14 +72,14 @@ public:
 
     bool OnGossipSelect(Player* player, Creature* creature, uint32 /*sender*/, uint32 uiAction) override
     {
-        if( !creature->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP) )
+        if (!creature->HasNpcFlag(UNIT_NPC_FLAG_GOSSIP))
             return true;
 
         InstanceScript* pInstance = creature->GetInstanceScript();
-        if( !pInstance )
+        if (!pInstance)
             return true;
 
-        if( uiAction == GOSSIP_ACTION_INFO_DEF + 1337 )
+        if (uiAction == GOSSIP_ACTION_INFO_DEF + 1337)
         {
             pInstance->SetData(TYPE_ANNOUNCER_GOSSIP_SELECT, 0);
             creature->RemoveNpcFlag(UNIT_NPC_FLAG_GOSSIP);

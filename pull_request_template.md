@@ -1,11 +1,25 @@
 <!-- First of all, THANK YOU for your contribution. -->
 
+<!-- How to title your Pull Request, Description, Co-Authors (Cherry Pick) and others, please see the link below -->
+<!-- https://www.azerothcore.org/wiki/commit-message-guidelines -->
+
 ## Changes Proposed:
 <!-- If your pull request promotes complex changes that require a detailed explanation, please describe them in detail specifying what your solution is and what is it meant to address. -->
 This PR proposes changes to:
 -  [ ] Core (units, players, creatures, game systems).
 -  [ ] Scripts (bosses, spell scripts, creature scripts).
 -  [ ] Database (SAI, creatures, etc).
+
+### AI-assisted Pull Requests
+
+> [!IMPORTANT]
+> Using AI tools to prepare pull requests is allowed, but it must be disclosed and it must follow our AC guidelines for AI Agentic Engineering (link below).
+>
+> You are expected to fully understand the changes you submit and to be able to explain and justify them when maintainers ask.
+
+- [ ] AI tools (e.g. Claude, ChatGPT, or similar) were used entirely or partially to prepare this pull request. If checked, specify which tools and models below.
+   - Tools/models used:
+- [ ] I have read and understood the [AC guidelines for AI Agentic Engineering](https://www.azerothcore.org/wiki/agentic-engineering)
 
 ## Issues Addressed:
 <!-- If your fix has a relating issue, link it below -->

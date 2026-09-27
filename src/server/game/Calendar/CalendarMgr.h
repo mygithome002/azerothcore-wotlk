@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -28,7 +28,7 @@ enum CalendarMailAnswers
 {
     // else
     CALENDAR_EVENT_REMOVED_MAIL_SUBJECT     = 0,
-    // if ( *(_DWORD *)(a1 + 8292) & 0x100 )
+    // if (*(_DWORD *)(a1 + 8292) & 0x100 )
     CALENDAR_INVITE_REMOVED_MAIL_SUBJECT    = 0x100
 };
 
@@ -171,7 +171,7 @@ public:
     void SetStatusTime(time_t statusTime) { _statusTime = statusTime; }
     time_t GetStatusTime() const { return _statusTime; }
 
-    void SetText(const std::string& text) { _text = text; }
+    void SetText(std::string const& text) { _text = text; }
     std::string GetText() const { return _text; }
 
     void SetStatus(CalendarInviteStatus status) { _status = status; }
@@ -228,10 +228,10 @@ public:
     void SetGuildId(uint32 guildId) { _guildId = guildId; }
     uint32 GetGuildId() const { return _guildId; }
 
-    void SetTitle(const std::string& title) { _title = title; }
+    void SetTitle(std::string const& title) { _title = title; }
     std::string GetTitle() const { return _title; }
 
-    void SetDescription(const std::string& description) { _description = description; }
+    void SetDescription(std::string const& description) { _description = description; }
     std::string GetDescription() const { return _description; }
 
     void SetType(CalendarEventType type) { _type = type; }
@@ -293,7 +293,7 @@ public:
 
     void LoadFromDB();
 
-    CalendarEvent* GetEvent(uint64 eventId);
+    CalendarEvent* GetEvent(uint64 eventId, CalendarEventStore::iterator* it = nullptr);
     CalendarEventStore const& GetEvents() const { return _events; }
     CalendarEventStore GetEventsCreatedBy(ObjectGuid guid, bool includeGuildEvents = false);
     CalendarEventStore GetPlayerEvents(ObjectGuid guid);
@@ -314,8 +314,8 @@ public:
     uint32 GetPlayerNumPending(ObjectGuid guid);
 
     void AddEvent(CalendarEvent* calendarEvent, CalendarSendEventType sendType);
-    void RemoveEvent(uint64 eventId, ObjectGuid remover);
-    void RemoveEvent(CalendarEvent* calendarEvent, ObjectGuid remover);
+    CalendarEventStore::iterator RemoveEvent(uint64 eventId, ObjectGuid remover);
+    CalendarEventStore::iterator RemoveEvent(CalendarEvent* calendarEvent, ObjectGuid remover, CalendarEventStore::const_iterator* currIt = nullptr);
     void UpdateEvent(CalendarEvent* calendarEvent);
 
     void AddInvite(CalendarEvent* calendarEvent, CalendarInvite* invite, CharacterDatabaseTransaction trans = nullptr);

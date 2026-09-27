@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -51,7 +51,7 @@ void ScriptMgr::OnPetAddToWorld(Pet* pet)
     CALL_ENABLED_HOOKS(PetScript, PETHOOK_ON_PET_ADD_TO_WORLD, script->OnPetAddToWorld(pet));
 }
 
-PetScript::PetScript(const char* name, std::vector<uint16> enabledHooks)
+PetScript::PetScript(char const* name, std::vector<uint16> enabledHooks)
     : ScriptObject(name, PETHOOK_END)
 {
     // If empty - enable all available hooks.

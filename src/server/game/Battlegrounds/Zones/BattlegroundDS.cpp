@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,6 +22,8 @@
 #include "ObjectAccessor.h"
 #include "Player.h"
 #include "WorldPacket.h"
+#include "WorldStateDefines.h"
+#include "WorldStatePackets.h"
 
 BattlegroundDS::BattlegroundDS()
 {
@@ -173,10 +175,10 @@ bool BattlegroundDS::HandlePlayerUnderMap(Player* player)
     return true;
 }
 
-void BattlegroundDS::FillInitialWorldStates(WorldPacket& data)
+void BattlegroundDS::FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet)
 {
-    data << uint32(3610) << uint32(1);                                              // 9 show
-    Arena::FillInitialWorldStates(data);
+    packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_RV_ARENA_SHOW, 1); // Wrong worldstate used
+    Arena::FillInitialWorldStates(packet);
 }
 
 bool BattlegroundDS::SetupBattleground()
@@ -193,10 +195,7 @@ bool BattlegroundDS::SetupBattleground()
             // knockback creatures
             || !AddCreature(BG_DS_NPC_TYPE_WATER_SPOUT, BG_DS_NPC_WATERFALL_KNOCKBACK, 1291.76f, 791.02f, 7.115f, 3.054326f, RESPAWN_IMMEDIATELY)
             || !AddCreature(BG_DS_NPC_TYPE_WATER_SPOUT, BG_DS_NPC_PIPE_KNOCKBACK_1, 1369.977f, 817.2882f, 16.08718f, 3.106686f, RESPAWN_IMMEDIATELY)
-            || !AddCreature(BG_DS_NPC_TYPE_WATER_SPOUT, BG_DS_NPC_PIPE_KNOCKBACK_2, 1212.833f, 765.3871f, 16.09484f, 0.0f, RESPAWN_IMMEDIATELY)
-            // Arena Ready Marker
-            || !AddObject(BG_DS_OBJECT_READY_MARKER_1, ARENA_READY_MARKER_ENTRY, 1229.44f, 759.35f, 17.89f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 300)
-            || !AddObject(BG_DS_OBJECT_READY_MARKER_2, ARENA_READY_MARKER_ENTRY, 1352.90f, 822.77f, 17.96f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 300))
+            || !AddCreature(BG_DS_NPC_TYPE_WATER_SPOUT, BG_DS_NPC_PIPE_KNOCKBACK_2, 1212.833f, 765.3871f, 16.09484f, 0.0f, RESPAWN_IMMEDIATELY))
     {
         LOG_ERROR("sql.sql", "BatteGroundDS: Failed to spawn some object!");
         return false;

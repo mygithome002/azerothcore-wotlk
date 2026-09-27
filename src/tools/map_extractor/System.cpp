@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <set>
 #include <unordered_map>
+#include <cstring>
 
 #ifdef _WIN32
 #include "direct.h"
@@ -99,7 +100,7 @@ float CONF_flat_height_delta_limit = 0.005f; // If max - min less this value - s
 float CONF_flat_liquid_delta_limit = 0.001f; // If max - min less this value - liquid surface is flat
 
 // List MPQ for extract from
-const char* CONF_mpq_list[] =
+char const* CONF_mpq_list[] =
 {
     "common.MPQ",
     "common-2.MPQ",
@@ -112,10 +113,10 @@ const char* CONF_mpq_list[] =
     "patch-5.MPQ",
 };
 
-static const char* const langs[] = {"enGB", "enUS", "deDE", "esES", "frFR", "koKR", "zhCN", "zhTW", "enCN", "enTW", "esMX", "ruRU" };
+static char const* const langs[] = {"enGB", "enUS", "deDE", "esES", "frFR", "koKR", "zhCN", "zhTW", "enCN", "enTW", "esMX", "ruRU" };
 #define LANG_COUNT 12
 
-void CreateDir( const std::string& Path )
+void CreateDir( std::string const& Path )
 {
     if (chdir(Path.c_str()) == 0)
     {
@@ -140,7 +141,7 @@ void CreateDir( const std::string& Path )
     }
 }
 
-bool FileExists( const char* FileName )
+bool FileExists( char const* FileName )
 {
     int fp = _open(FileName, OPEN_FLAGS);
     if (fp != -1)
@@ -184,7 +185,8 @@ void HandleArgs(int argc, char* arg[])
             case 'i':
                 if (c + 1 < argc)                           // all ok
                 {
-                    strcpy(input_path, arg[(c++) + 1]);
+                    std::strncpy(input_path, arg[(c++) + 1], MAX_PATH_LENGTH - 1);
+                    input_path[MAX_PATH_LENGTH - 1] = '\0';
                 }
                 else
                 {
@@ -194,7 +196,8 @@ void HandleArgs(int argc, char* arg[])
             case 'o':
                 if (c + 1 < argc)                           // all ok
                 {
-                    strcpy(output_path, arg[(c++) + 1]);
+                    std::strncpy(output_path, arg[(c++) + 1], MAX_PATH_LENGTH - 1);
+                    output_path[MAX_PATH_LENGTH - 1] = '\0';
                 }
                 else
                 {
@@ -282,7 +285,8 @@ uint32 ReadMapDBC()
     for (uint32 x = 0; x < map_count; ++x)
     {
         map_ids[x].id = dbc.getRecord(x).getUInt(0);
-        strcpy(map_ids[x].name, dbc.getRecord(x).getString(1));
+        std::strncpy(map_ids[x].name, dbc.getRecord(x).getString(1), sizeof(map_ids[x].name) - 1);
+        map_ids[x].name[sizeof(map_ids[x].name) - 1] = '\0';
     }
     printf("Done! (%u maps loaded)\n", (uint32)map_count);
     return map_count;
@@ -1067,7 +1071,7 @@ void ExtractDBCFiles(int locale, bool basicLocale)
 
     // extract DBCs
     uint32 count = 0;
-    for (const auto & dbcfile : dbcfiles)
+    for (auto const& dbcfile : dbcfiles)
     {
         string filename = path;
         filename += (dbcfile.c_str() + strlen("DBFilesClient\\"));
@@ -1144,7 +1148,7 @@ void LoadLocaleMPQFiles(int const locale)
     sprintf(filename, "%s/Data/%s/locale-%s.MPQ", input_path, langs[locale], langs[locale]);
     new MPQArchive(filename);
 
-    for (int i = 1; i < 5; ++i)
+    for (int i = 1; i <= 9; ++i)
     {
         char ext[3] = "";
         if (i > 1)

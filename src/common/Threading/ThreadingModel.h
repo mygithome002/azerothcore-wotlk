@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -41,8 +41,8 @@ namespace Acore
         }
 
     private:
-        GeneralLock(const GeneralLock&);
-        GeneralLock& operator=(const GeneralLock&);
+        GeneralLock(GeneralLock const&);
+        GeneralLock& operator=(GeneralLock const&);
         MUTEX& i_mutex;
     };
 
@@ -55,11 +55,11 @@ namespace Acore
             Lock()
             {
             }
-            Lock(const T&)
+            Lock(T const&)
             {
             }
 
-            Lock(const SingleThreaded<T>&)              // for single threaded we ignore this
+            Lock(SingleThreaded<T> const&)              // for single threaded we ignore this
             {
             }
         };
@@ -90,8 +90,8 @@ namespace Acore
 
     private:
         // prevent the compiler creating a copy construct
-        ObjectLevelLockable(const ObjectLevelLockable<T, MUTEX>&);
-        ObjectLevelLockable<T, MUTEX>& operator=(const ObjectLevelLockable<T, MUTEX>&);
+        ObjectLevelLockable(ObjectLevelLockable<T, MUTEX> const&);
+        ObjectLevelLockable<T, MUTEX>& operator=(ObjectLevelLockable<T, MUTEX> const&);
 
         MUTEX i_mtx;
     };
@@ -109,12 +109,12 @@ namespace Acore
         class Lock
         {
         public:
-            Lock(const T& /*host*/)
+            Lock(T const& /*host*/)
             {
                 ClassLevelLockable<T, MUTEX>::si_mtx.lock();
             }
 
-            Lock(const ClassLevelLockable<T, MUTEX>&)
+            Lock(ClassLevelLockable<T, MUTEX> const&)
             {
                 ClassLevelLockable<T, MUTEX>::si_mtx.lock();
             }

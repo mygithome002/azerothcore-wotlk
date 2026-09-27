@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -20,7 +20,6 @@
 
 #include <cassert>
 #include <string>
-#include <utility>
 
 class DBCFile
 {
@@ -40,7 +39,7 @@ public:
         Exception(std::string  message): message(std::move(message))
         { }
         virtual ~Exception() = default;
-        const std::string& getMessage() {return message;}
+        std::string const& getMessage() {return message;}
     private:
         std::string message;
     };
@@ -58,7 +57,7 @@ public:
     class Record
     {
     public:
-        Record& operator= (const Record& r)
+        Record& operator= (Record const& r)
         {
             file = r.file;
             offset = r.offset;
@@ -84,7 +83,7 @@ public:
             assert(ofs < file.recordSize);
             return *reinterpret_cast<unsigned char*>(offset + ofs);
         }
-        [[nodiscard]] const char* getString(std::size_t field) const
+        [[nodiscard]] char const* getString(std::size_t field) const
         {
             assert(field < file.fieldCount);
             std::size_t stringOffset = getUInt(field);
@@ -116,16 +115,16 @@ public:
         }
         /// Return address of current instance
         Record const& operator*() const { return record; }
-        const Record* operator->() const
+        Record const* operator->() const
         {
             return &record;
         }
         /// Comparison
-        bool operator==(const Iterator& b) const
+        bool operator==(Iterator const& b) const
         {
             return record.offset == b.record.offset;
         }
-        bool operator!=(const Iterator& b) const
+        bool operator!=(Iterator const& b) const
         {
             return record.offset != b.record.offset;
         }

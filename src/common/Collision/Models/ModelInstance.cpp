@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -24,13 +24,13 @@ using G3D::Ray;
 
 namespace VMAP
 {
-    ModelInstance::ModelInstance(const ModelSpawn& spawn, WorldModel* model): ModelSpawn(spawn), iModel(model)
+    ModelInstance::ModelInstance(ModelSpawn const& spawn, std::shared_ptr<WorldModel> model): ModelSpawn(spawn), iModel(model)
     {
         iInvRot = G3D::Matrix3::fromEulerAnglesZYX(G3D::pi() * iRot.y / 180.f, G3D::pi() * iRot.x / 180.f, G3D::pi() * iRot.z / 180.f).inverse();
         iInvScale = 1.f / iScale;
     }
 
-    bool ModelInstance::intersectRay(const G3D::Ray& pRay, float& pMaxDist, bool StopAtFirstHit, ModelIgnoreFlags ignoreFlags) const
+    bool ModelInstance::intersectRay(G3D::Ray const& pRay, float& pMaxDist, bool StopAtFirstHit, ModelIgnoreFlags ignoreFlags) const
     {
         if (!iModel)
         {
@@ -63,45 +63,7 @@ namespace VMAP
         return hit;
     }
 
-    void ModelInstance::intersectPoint(const G3D::Vector3& p, AreaInfo& info) const
-    {
-        if (!iModel)
-        {
-#ifdef VMAP_DEBUG
-            std::cout << "<object not loaded>\n";
-#endif
-            return;
-        }
-
-        // M2 files don't contain area info, only WMO files
-        if (flags & MOD_M2)
-        {
-            return;
-        }
-        if (!iBound.contains(p))
-        {
-            return;
-        }
-        // child bounds are defined in object space:
-        Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
-        Vector3 zDirModel = iInvRot * Vector3(0.f, 0.f, -1.f);
-        float zDist;
-        if (iModel->IntersectPoint(pModel, zDirModel, zDist, info))
-        {
-            Vector3 modelGround = pModel + zDist * zDirModel;
-            // Transform back to world space. Note that:
-            // Mat * vec == vec * Mat.transpose()
-            // and for rotation matrices: Mat.inverse() == Mat.transpose()
-            float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
-            if (info.ground_Z < world_Z)
-            {
-                info.ground_Z = world_Z;
-                info.adtId = adtId;
-            }
-        }
-    }
-
-    bool ModelInstance::GetLocationInfo(const G3D::Vector3& p, LocationInfo& info) const
+    bool ModelInstance::GetLocationInfo(G3D::Vector3 const& p, LocationInfo& info) const
     {
         if (!iModel)
         {
@@ -124,7 +86,9 @@ namespace VMAP
         Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
         Vector3 zDirModel = iInvRot * Vector3(0.f, 0.f, -1.f);
         float zDist;
-        if (iModel->GetLocationInfo(pModel, zDirModel, zDist, info))
+
+        GroupLocationInfo groupInfo;
+        if (iModel->GetLocationInfo(pModel, zDirModel, zDist, groupInfo))
         {
             Vector3 modelGround = pModel + zDist * zDirModel;
             // Transform back to world space. Note that:
@@ -133,6 +97,8 @@ namespace VMAP
             float world_Z = ((modelGround * iInvRot) * iScale + iPos).z;
             if (info.ground_Z < world_Z) // hm...could it be handled automatically with zDist at intersection?
             {
+                info.rootId = groupInfo.rootId;
+                info.hitModel = groupInfo.hitModel;
                 info.ground_Z = world_Z;
                 info.hitInstance = this;
                 return true;
@@ -141,7 +107,7 @@ namespace VMAP
         return false;
     }
 
-    bool ModelInstance::GetLiquidLevel(const G3D::Vector3& p, LocationInfo& info, float& liqHeight) const
+    bool ModelInstance::GetLiquidLevel(G3D::Vector3 const& p, LocationInfo& info, float& liqHeight) const
     {
         // child bounds are defined in object space:
         Vector3 pModel = iInvRot * (p - iPos) * iInvScale;
@@ -150,8 +116,7 @@ namespace VMAP
         if (info.hitModel->GetLiquidLevel(pModel, zDist))
         {
             // calculate world height (zDist in model coords):
-            // assume WMO not tilted (wouldn't make much sense anyway)
-            liqHeight = zDist * iScale + iPos.z;
+            liqHeight = (Vector3(pModel.x, pModel.y, zDist) * iInvRot * iScale + iPos).z;
             return true;
         }
         return false;
@@ -205,7 +170,7 @@ namespace VMAP
         return true;
     }
 
-    bool ModelSpawn::writeToFile(FILE* wf, const ModelSpawn& spawn)
+    bool ModelSpawn::writeToFile(FILE* wf, ModelSpawn const& spawn)
     {
         uint32 check = 0;
         check += fwrite(&spawn.flags, sizeof(uint32), 1, wf);
@@ -227,5 +192,4 @@ namespace VMAP
         if (check != nameLen) { return false; }
         return true;
     }
-
 }

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -26,9 +26,7 @@ enum BattlegroundRLObjectTypes
     BG_RL_OBJECT_DOOR_2         = 1,
     BG_RL_OBJECT_BUFF_1         = 2,
     BG_RL_OBJECT_BUFF_2         = 3,
-    BG_RL_OBJECT_READY_MARKER_1 = 4,
-    BG_RL_OBJECT_READY_MARKER_2 = 5,
-    BG_RL_OBJECT_MAX            = 6
+    BG_RL_OBJECT_MAX            = 4
 };
 
 enum BattlegroundRLObjects
@@ -45,7 +43,7 @@ public:
     BattlegroundRL();
 
     /* inherited from BattlegroundClass */
-    void FillInitialWorldStates(WorldPacket& d) override;
+    void FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet) override;
     void StartingEventCloseDoors() override;
     void StartingEventOpenDoors() override;
 

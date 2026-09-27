@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -67,8 +67,7 @@ struct boss_gruul : public BossAI
     void Reset() override
     {
         _Reset();
-        _recentlySpoken = false;
-        _caveInTimer = 29000ms;
+        _caveInTimer = 29s;
     }
 
     void JustEngagedWith(Unit* /*who*/) override
@@ -84,7 +83,7 @@ struct boss_gruul : public BossAI
         }).Schedule(_caveInTimer, [this](TaskContext context)
         {
             DoCastRandomTarget(SPELL_CAVE_IN);
-            if (_caveInTimer > 4000ms)
+            if (_caveInTimer > 4s)
             {
                 _caveInTimer = _caveInTimer - 1500ms;
             }
@@ -95,7 +94,7 @@ struct boss_gruul : public BossAI
             context.Repeat(39900ms, 55700ms);
         }).Schedule(5600ms, [this](TaskContext context)
         {
-            if (Unit* target = SelectTarget(SelectTargetMethod::MaxThreat, 1, 5.0f))
+            if (Unit* target = SelectTarget(SelectTargetMethod::MaxThreat, 0, 5.0f, false, false))
             {
                 DoCast(target, SPELL_HURTFUL_STRIKE);
             }
@@ -119,18 +118,9 @@ struct boss_gruul : public BossAI
         });
     }
 
-    void KilledUnit(Unit* /*who*/) override
+    void KilledUnit(Unit* /*victim*/) override
     {
-        if (!_recentlySpoken)
-        {
-            Talk(SAY_SLAY);
-            _recentlySpoken = true;
-        }
-
-        scheduler.Schedule(5s, [this](TaskContext)
-        {
-            _recentlySpoken = false;
-        });
+        Talk(SAY_SLAY);
     }
 
     void JustDied(Unit* /*killer*/) override
@@ -154,7 +144,6 @@ struct boss_gruul : public BossAI
 
 private:
     std::chrono::milliseconds _caveInTimer;
-    bool _recentlySpoken;
 };
 
 struct npc_invisible_tractor_beam_source : public NullCreatureAI

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -16,14 +16,13 @@
  */
 
 #include "BattlegroundRV.h"
-#include "ArenaScore.h"
 #include "Battleground.h"
 #include "GameObject.h"
 #include "Log.h"
 #include "ObjectAccessor.h"
-#include "Pet.h"
 #include "Player.h"
 #include "WorldPacket.h"
+#include "WorldStateDefines.h"
 
 static constexpr Milliseconds BG_RV_PILLAR_SWITCH_TIMER  = 25s;
 static constexpr Milliseconds BG_RV_FIRE_TO_PILLAR_TIMER = 20s;
@@ -97,7 +96,7 @@ void BattlegroundRV::PostUpdateImpl(uint32 diff)
                     if (player->GetPositionZ() < 27.0f)
                         TeleportUnitToNewZ(player, 28.28f, true);
 
-                    for (uint8 i = SUMMON_SLOT_TOTEM; i < MAX_TOTEM_SLOT; ++i)
+                    for (uint8 i = SUMMON_SLOT_TOTEM_FIRE; i < MAX_TOTEM_SLOT; ++i)
                         if (player->m_SummonSlot[i])
                             if (Creature* totem = GetBgMap()->GetCreature(player->m_SummonSlot[i]))
                                 if (totem->GetPositionZ() < 28.0f)
@@ -206,10 +205,10 @@ void BattlegroundRV::HandleAreaTrigger(Player* player, uint32 trigger)
     }
 }
 
-void BattlegroundRV::FillInitialWorldStates(WorldPacket& data)
+void BattlegroundRV::FillInitialWorldStates(WorldPackets::WorldState::InitWorldStates& packet)
 {
-    data << uint32(BG_RV_WORLD_STATE) << uint32(1);
-    Arena::FillInitialWorldStates(data);
+    packet.Worldstates.emplace_back(WORLD_STATE_BATTLEGROUND_RV_ARENA_SHOW, 1);
+    Arena::FillInitialWorldStates(packet);
 }
 
 void BattlegroundRV::Init()
@@ -241,12 +240,7 @@ bool BattlegroundRV::SetupBattleground()
             || !AddObject(BG_RV_OBJECT_PILAR_1, BG_RV_OBJECT_TYPE_PILAR_1, 763.632385f, -306.162384f, 25.909504f, 3.141593f, 0, 0, 0, RESPAWN_IMMEDIATELY)
             || !AddObject(BG_RV_OBJECT_PILAR_2, BG_RV_OBJECT_TYPE_PILAR_2, 723.644287f, -284.493256f, 24.648525f, 3.141593f, 0, 0, 0, RESPAWN_IMMEDIATELY)
             || !AddObject(BG_RV_OBJECT_PILAR_3, BG_RV_OBJECT_TYPE_PILAR_3, 763.611145f, -261.856750f, 25.909504f, 0.000000f, 0, 0, 0, RESPAWN_IMMEDIATELY)
-            || !AddObject(BG_RV_OBJECT_PILAR_4, BG_RV_OBJECT_TYPE_PILAR_4, 802.211609f, -284.493256f, 24.648525f, 0.000000f, 0, 0, 0, RESPAWN_IMMEDIATELY)
-
-            // Arena Ready Marker
-            || !AddObject(BG_RV_OBJECT_READY_MARKER_1, ARENA_READY_MARKER_ENTRY, 769.93f, -301.04f, 2.80f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 300)
-            || !AddObject(BG_RV_OBJECT_READY_MARKER_2, ARENA_READY_MARKER_ENTRY, 757.02f, -267.30f, 2.80f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 300)
-       )
+            || !AddObject(BG_RV_OBJECT_PILAR_4, BG_RV_OBJECT_TYPE_PILAR_4, 802.211609f, -284.493256f, 24.648525f, 0.000000f, 0, 0, 0, RESPAWN_IMMEDIATELY))
     {
         LOG_ERROR("sql.sql", "BatteGroundRV: Failed to spawn some object!");
         return false;

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -20,7 +20,14 @@
 
 #include "Define.h"
 #include "ObjectGuid.h"
+#include <memory>
 #include <vector>
+
+class AuraEffect;
+class Item;
+struct Position;
+class SpellCastTargets;
+class WorldObject;
 
 enum SpellInterruptFlags
 {
@@ -29,7 +36,7 @@ enum SpellInterruptFlags
     SPELL_INTERRUPT_FLAG_UNK3         = 0x04, // any info?
     SPELL_INTERRUPT_FLAG_INTERRUPT    = 0x08, // interrupt
     SPELL_INTERRUPT_FLAG_ABORT_ON_DMG = 0x10,               // _complete_ interrupt on direct damage
-    //SPELL_INTERRUPT_UNK             = 0x20                // unk, 564 of 727 spells having this spell start with "Glyph"
+    SPELL_INTERRUPT_UNK               = 0x20                // unk, 564 of 727 spells having this spell start with "Glyph"
 };
 
 // See SpellAuraInterruptFlags for other values definitions
@@ -118,7 +125,10 @@ enum SpellValueMod
     SPELLVALUE_MAX_TARGETS,
     SPELLVALUE_AURA_STACK,
     SPELLVALUE_AURA_DURATION,
-    SPELLVALUE_FORCED_CRIT_RESULT
+    SPELLVALUE_FORCED_CRIT_RESULT,
+    SPELLVALUE_MISCVALUE0,
+    SPELLVALUE_MISCVALUE1,
+    SPELLVALUE_MISCVALUE2,
 };
 
 enum SpellFacingFlags
@@ -168,15 +178,63 @@ public:
     }
 };
 
-struct SpellImmune
+// AzerothCore note: TC keeps SpellCastTargets in SpellDefines.h, so its
+// CastSpellTargetArg can hold an Optional<SpellCastTargets> by value.
+// In AC, SpellCastTargets lives in Spell.h and depends on WorldLocation,
+// so we hold it via std::unique_ptr (forward-declaration friendly) and
+// define all special members out-of-line in Spell.cpp where the type is
+// complete. A null Targets pointer signals an error/empty state, matching
+// TC's empty-optional semantics.
+//
+// AzerothCore note: AC has no AreaTrigger entity (DBC structs only). Any
+// TC backport that constructs spells via AreaTrigger::CastSpell must be
+// translated manually.
+struct AC_GAME_API CastSpellTargetArg
 {
-    SpellImmune() : spellId(0), type(IMMUNITY_EFFECT), blockType(SPELL_BLOCK_TYPE_ALL) { }
+    CastSpellTargetArg();
+    CastSpellTargetArg(std::nullptr_t);
+    CastSpellTargetArg(WorldObject* target);
+    CastSpellTargetArg(Item* itemTarget);
+    CastSpellTargetArg(Position const& dest);
+    CastSpellTargetArg(SpellCastTargets&& targets);
+    CastSpellTargetArg(CastSpellTargetArg&&) noexcept;
+    CastSpellTargetArg& operator=(CastSpellTargetArg&&) noexcept;
+    ~CastSpellTargetArg();
 
-    uint32 spellId;
-    uint32 type;
-    uint32 blockType;
+    std::unique_ptr<SpellCastTargets> Targets;
 };
 
-typedef std::vector<SpellImmune> SpellImmuneList;
+struct AC_GAME_API CastSpellExtraArgs
+{
+    CastSpellExtraArgs() = default;
+    CastSpellExtraArgs(bool triggered)
+        : TriggerFlags(triggered ? TRIGGERED_FULL_MASK : TRIGGERED_NONE) {}
+    CastSpellExtraArgs(TriggerCastFlags trigger) : TriggerFlags(trigger) {}
+    CastSpellExtraArgs(Item* item)
+        : TriggerFlags(TRIGGERED_FULL_MASK), CastItem(item) {}
+    CastSpellExtraArgs(AuraEffect const* eff)
+        : TriggerFlags(TRIGGERED_FULL_MASK), TriggeringAura(eff) {}
+    CastSpellExtraArgs(ObjectGuid const& origCaster)
+        : TriggerFlags(TRIGGERED_FULL_MASK), OriginalCaster(origCaster) {}
+    CastSpellExtraArgs(AuraEffect const* eff, ObjectGuid const& origCaster)
+        : TriggerFlags(TRIGGERED_FULL_MASK), TriggeringAura(eff), OriginalCaster(origCaster) {}
+    CastSpellExtraArgs(SpellValueMod mod, int32 val)
+    {
+        SpellValueOverrides.AddSpellMod(mod, val);
+    }
+
+    CastSpellExtraArgs& SetTriggerFlags(TriggerCastFlags flag) { TriggerFlags = flag; return *this; }
+    CastSpellExtraArgs& SetCastItem(Item* item) { CastItem = item; return *this; }
+    CastSpellExtraArgs& SetTriggeringAura(AuraEffect const* eff) { TriggeringAura = eff; return *this; }
+    CastSpellExtraArgs& SetOriginalCaster(ObjectGuid const& guid) { OriginalCaster = guid; return *this; }
+    CastSpellExtraArgs& AddSpellMod(SpellValueMod mod, int32 val) { SpellValueOverrides.AddSpellMod(mod, val); return *this; }
+    CastSpellExtraArgs& AddSpellBP0(int32 val) { return AddSpellMod(SPELLVALUE_BASE_POINT0, val); }
+
+    TriggerCastFlags  TriggerFlags   = TRIGGERED_NONE;
+    Item*             CastItem       = nullptr;
+    AuraEffect const* TriggeringAura = nullptr;
+    ObjectGuid        OriginalCaster = ObjectGuid::Empty;
+    CustomSpellValues SpellValueOverrides;
+};
 
 #endif // SPELLDEFINES_H

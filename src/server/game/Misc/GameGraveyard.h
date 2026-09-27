@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -18,7 +18,6 @@
 #ifndef _GAMEGRAVEYARD_H_
 #define _GAMEGRAVEYARD_H_
 
-#include "Common.h"
 #include "Player.h"
 #include "SharedDefines.h"
 #include <map>
@@ -55,9 +54,11 @@ public:
     typedef std::unordered_map<uint32, GraveyardStruct> GraveyardContainer;
 
     GraveyardStruct const* GetGraveyard(uint32 ID) const;
-    GraveyardStruct const* GetGraveyard(const std::string& name) const;
+    GraveyardStruct const* GetGraveyard(std::string const& name) const;
     GraveyardStruct const* GetDefaultGraveyard(TeamId teamId);
     GraveyardStruct const* GetClosestGraveyard(Player* player, TeamId teamId, bool nearCorpse = false);
+    GraveyardStruct const* GetClosestGraveyard(uint32 mapId, float x, float y, float z, TeamId teamId,
+        uint32 areaId, uint32 zoneId, bool isDeathKnight);
     GraveyardData const* FindGraveyardData(uint32 id, uint32 zone);
     GraveyardContainer const& GetGraveyardData() const { return _graveyardStore; }
     bool AddGraveyardLink(uint32 id, uint32 zoneId, TeamId teamId, bool persist = true);

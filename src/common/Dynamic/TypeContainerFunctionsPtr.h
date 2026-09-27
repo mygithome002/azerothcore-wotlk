@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -81,23 +81,23 @@ namespace Acore
     }
 
     // const find functions
-    template<class SPECIFIC_TYPE> const CountedPtr<SPECIFIC_TYPE>& Find(const ContainerMapList<SPECIFIC_TYPE>& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* /*fake*/)
+    template<class SPECIFIC_TYPE> CountedPtr<SPECIFIC_TYPE> const& Find(ContainerMapList<SPECIFIC_TYPE> const& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* /*fake*/)
     {
         typename CountedPtr<SPECIFIC_TYPE>::iterator iter = elements._element.find(hdl);
         return (iter == elements._element.end() ? NullPtr<SPECIFIC_TYPE>((SPECIFIC_TYPE*)nullptr) : iter->second);
     };
 
-    template<class SPECIFIC_TYPE> const CountedPtr<SPECIFIC_TYPE>& Find(const ContainerMapList<TypeNull>& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* /*fake*/)
+    template<class SPECIFIC_TYPE> CountedPtr<SPECIFIC_TYPE> const& Find(ContainerMapList<TypeNull> const& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* /*fake*/)
     {
         return NullPtr<SPECIFIC_TYPE>((SPECIFIC_TYPE*)nullptr);
     }
 
-    template<class SPECIFIC_TYPE, class T> const CountedPtr<SPECIFIC_TYPE>& Find(const ContainerMapList<T>& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* /*fake*/)
+    template<class SPECIFIC_TYPE, class T> CountedPtr<SPECIFIC_TYPE> const& Find(ContainerMapList<T> const& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* /*fake*/)
     {
         return NullPtr<SPECIFIC_TYPE>((SPECIFIC_TYPE*)nullptr);
     }
 
-    template<class SPECIFIC_TYPE, class H, class T> CountedPtr<SPECIFIC_TYPE>& Find(const ContainerMapList<TypeList<H, T>>& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* fake)
+    template<class SPECIFIC_TYPE, class H, class T> CountedPtr<SPECIFIC_TYPE>& Find(ContainerMapList<TypeList<H, T>> const& elements, OBJECT_HANDLE hdl, CountedPtr<SPECIFIC_TYPE>* fake)
     {
         CountedPtr<SPECIFIC_TYPE>& t = Find(elements._elements, hdl, fake);
         if (!t)
@@ -137,7 +137,7 @@ namespace Acore
     template<class SPECIFIC_TYPE> bool Remove(ContainerMapList<SPECIFIC_TYPE>& elements, CountedPtr<SPECIFIC_TYPE>& obj, OBJECT_HANDLE hdl)
     {
         typename std::map<OBJECT_HANDLE, CountedPtr<SPECIFIC_TYPE>>::iterator iter = elements._element.find(hdl);
-        if ( iter != elements._element.end() )
+        if (iter != elements._element.end())
         {
             elements._element.erase(iter);
             return true;
@@ -163,6 +163,5 @@ namespace Acore
         bool t = Remove(elements._elements, obj, hdl);
         return ( !t ? Remove(elements._TailElements, obj, hdl) : t );
     }
-
 }
 #endif

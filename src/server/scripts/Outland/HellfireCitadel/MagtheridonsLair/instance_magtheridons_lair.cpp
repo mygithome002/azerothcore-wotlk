@@ -1,20 +1,21 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "CreatureAI.h"
 #include "InstanceMapScript.h"
 #include "InstanceScript.h"
 #include "magtheridons_lair.h"
@@ -30,15 +31,10 @@ DoorData const doorData[] =
     { 0,                        0,                          DOOR_TYPE_ROOM } // END
 };
 
-MinionData const minionData[] =
-{
-    { NPC_HELLFIRE_CHANNELER,   DATA_MAGTHERIDON }
-};
-
 class instance_magtheridons_lair : public InstanceMapScript
 {
 public:
-    instance_magtheridons_lair() : InstanceMapScript("instance_magtheridons_lair", 544) { }
+    instance_magtheridons_lair() : InstanceMapScript("instance_magtheridons_lair", MAP_MAGTHERIDONS_LAIR) { }
 
     struct instance_magtheridons_lair_InstanceMapScript : public InstanceScript
     {
@@ -47,15 +43,26 @@ public:
             SetHeaders(DataHeader);
             SetBossNumber(MAX_ENCOUNTER);
             LoadDoorData(doorData);
-            LoadMinionData(minionData);
             LoadBossBoundaries(boundaries);
         }
 
         void Initialize() override
         {
+            _channelersSet.clear();
             _wardersSet.clear();
+            _burningAbyssalsSet.clear();
             _cubesSet.clear();
             _columnSet.clear();
+        }
+
+        bool IsAnyChannelerAlive()
+        {
+            return std::ranges::any_of(_channelersSet, [&](ObjectGuid const& guid)
+            {
+                if (Creature* channeler = instance->GetCreature(guid))
+                    return channeler->IsAlive();
+                return false;
+            });
         }
 
         void OnCreatureCreate(Creature* creature) override
@@ -66,22 +73,50 @@ public:
                     _magtheridonGUID = creature->GetGUID();
                     break;
                 case NPC_HELLFIRE_CHANNELER:
-                    AddMinion(creature);
+                    _channelersSet.insert(creature->GetGUID());
                     break;
                 case NPC_HELLFIRE_WARDER:
                     _wardersSet.insert(creature->GetGUID());
+                    break;
+                case NPC_BURNING_ABYSSAL:
+                    _burningAbyssalsSet.insert(creature->GetGUID());
                     break;
             }
         }
 
         void OnCreatureRemove(Creature* creature) override
         {
-            switch (creature->GetEntry())
-            {
-                case NPC_HELLFIRE_CHANNELER:
-                    RemoveMinion(creature);
-                    break;
-            }
+            if (creature->GetEntry() == NPC_BURNING_ABYSSAL)
+                _burningAbyssalsSet.erase(creature->GetGUID());
+        }
+
+        void OnUnitDeath(Unit* unit) override
+        {
+            Creature* creature = unit ? unit->ToCreature() : nullptr;
+            if (!creature || creature->GetEntry() != NPC_HELLFIRE_CHANNELER)
+                return;
+
+            // IN_PROGRESS guard: stays inert during the hard-reset Respawn(true) cycle.
+            if (GetBossState(DATA_MAGTHERIDON) != IN_PROGRESS || IsAnyChannelerAlive())
+                return;
+
+            if (Creature* magtheridon = instance->GetCreature(_magtheridonGUID))
+                magtheridon->AI()->DoAction(ACTION_RELEASE_MAGTHERIDON);
+        }
+
+        void OnCreatureEvade(Creature* creature) override
+        {
+            if (creature->GetEntry() != NPC_HELLFIRE_CHANNELER || GetBossState(DATA_MAGTHERIDON) != IN_PROGRESS)
+                return;
+
+            // Only a Channeler-phase wipe resets the encounter. Past the 2 minute auto-release he is
+            // loose with Channelers still up, and a reset there would disable the Manticron Cubes and
+            // open the door mid-fight.
+            if (Creature* magtheridon = instance->GetCreature(_magtheridonGUID))
+                if (magtheridon->AI()->GetData(DATA_MAGTHERIDON_RELEASED))
+                    return;
+
+            SetBossState(DATA_MAGTHERIDON, NOT_STARTED);
         }
 
         void OnGameObjectCreate(GameObject* go) override
@@ -153,6 +188,22 @@ public:
 
                     if (state == NOT_STARTED)
                         SetData(DATA_COLLAPSE, GO_READY);
+
+                    // Hard reset: vanish Channelers and their lingering Burning Abyssal summons.
+                    if (state == NOT_STARTED || state == FAIL)
+                    {
+                        for (ObjectGuid const& guid : _channelersSet)
+                            if (Creature* channeler = instance->GetCreature(guid))
+                                channeler->Respawn(true);
+
+                        for (ObjectGuid const& guid : _burningAbyssalsSet)
+                            if (Creature* abyssal = instance->GetCreature(guid))
+                                abyssal->DespawnOrUnsummon();
+
+                        // Reset a still-caged Magtheridon: he is engaged from the Channeler pull on.
+                        if (Creature* magtheridon = instance->GetCreature(_magtheridonGUID))
+                            magtheridon->AI()->DoAction(ACTION_RESET_ENCOUNTER);
+                    }
                 }
             }
             return true;
@@ -163,9 +214,15 @@ public:
             switch (type)
             {
                 case DATA_CHANNELER_COMBAT:
+                    // Start the encounter on the Channeler pull. The combat references this creates
+                    // engage Magtheridon (boss_magtheridon::JustEnteredCombat), which anchors his
+                    // release countdown here and not to when players can first hit him.
                     if (GetBossState(DATA_MAGTHERIDON) != IN_PROGRESS)
+                    {
+                        SetBossState(DATA_MAGTHERIDON, IN_PROGRESS);
                         if (Creature* magtheridon = instance->GetCreature(_magtheridonGUID))
                             magtheridon->SetInCombatWithZone();
+                    }
                     break;
                 case DATA_ACTIVATE_CUBES:
                     for (ObjectGuid const& guid : _cubesSet)
@@ -177,12 +234,16 @@ public:
                         if (GameObject* column = instance->GetGameObject(guid))
                             column->SetGoState(GOState(data));
                     break;
+                default:
+                    break;
             }
         }
 
     private:
         ObjectGuid _magtheridonGUID;
+        GuidSet _channelersSet;
         GuidSet _wardersSet;
+        GuidSet _burningAbyssalsSet;
         GuidSet _cubesSet;
         GuidSet _columnSet;
     };

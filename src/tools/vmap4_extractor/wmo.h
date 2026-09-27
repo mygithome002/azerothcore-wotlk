@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -65,7 +65,7 @@ namespace WMO
 }
 
 /* for whatever reason a certain company just can't stick to one coordinate system... */
-static inline Vec3D fixCoords(const Vec3D& v) { return Vec3D(v.z, v.x, v.y); }
+static inline Vec3D fixCoords(Vec3D const& v) { return Vec3D(v.z, v.x, v.y); }
 
 struct WMODoodadData
 {
@@ -85,6 +85,7 @@ public:
     float bbcorn1[3];
     float bbcorn2[3];
 
+    std::vector<char> GroupNames;
     WMODoodadData DoodadData;
     std::unordered_set<uint32> ValidDoodadNames;
 
@@ -154,6 +155,7 @@ public:
     bool open(WMORoot* rootWMO);
     int ConvertToVMAPGroupWmo(FILE* output, bool preciseVectorData);
     uint32 GetLiquidTypeId(uint32 liquidTypeId);
+    bool ShouldSkip(WMORoot const* root) const;
 };
 
 namespace MapObject

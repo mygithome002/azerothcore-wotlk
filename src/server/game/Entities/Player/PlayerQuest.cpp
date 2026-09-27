@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -26,6 +26,7 @@
 #include "MapMgr.h"
 #include "Player.h"
 #include "PoolMgr.h"
+#include "QuestPackets.h"
 #include "ReputationMgr.h"
 #include "ScriptMgr.h"
 #include "SpellAuraEffects.h"
@@ -236,10 +237,10 @@ Quest const* Player::GetNextQuest(ObjectGuid guid, Quest const* quest)
 
 bool Player::CanSeeStartQuest(Quest const* quest)
 {
-    if (!DisableMgr::IsDisabledFor(DISABLE_TYPE_QUEST, quest->GetQuestId(), this) && SatisfyQuestClass(quest, false) && SatisfyQuestRace(quest, false) &&
+    if (!sDisableMgr->IsDisabledFor(DISABLE_TYPE_QUEST, quest->GetQuestId(), this) && SatisfyQuestClass(quest, false) && SatisfyQuestRace(quest, false) &&
         SatisfyQuestSkill(quest, false) && SatisfyQuestExclusiveGroup(quest, false) && SatisfyQuestReputation(quest, false) &&
         SatisfyQuestPreviousQuest(quest, false) && SatisfyQuestNextChain(quest, false) &&
-        SatisfyQuestPrevChain(quest, false) && SatisfyQuestDay(quest, false) && SatisfyQuestWeek(quest, false) &&
+        SatisfyQuestPrevChain(quest, false) && SatisfyQuestBreadcrumb(quest, false) && SatisfyQuestDay(quest, false) && SatisfyQuestWeek(quest, false) &&
         SatisfyQuestMonth(quest, false) && SatisfyQuestSeasonal(quest, false))
     {
         return GetLevel() + sWorld->getIntConfig(CONFIG_QUEST_HIGH_LEVEL_HIDE_DIFF) >= quest->GetMinLevel();
@@ -250,12 +251,13 @@ bool Player::CanSeeStartQuest(Quest const* quest)
 
 bool Player::CanTakeQuest(Quest const* quest, bool msg)
 {
-    return !DisableMgr::IsDisabledFor(DISABLE_TYPE_QUEST, quest->GetQuestId(), this)
+    return !sDisableMgr->IsDisabledFor(DISABLE_TYPE_QUEST, quest->GetQuestId(), this)
            && SatisfyQuestStatus(quest, msg) && SatisfyQuestExclusiveGroup(quest, msg)
            && SatisfyQuestClass(quest, msg) && SatisfyQuestRace(quest, msg) && SatisfyQuestLevel(quest, msg)
            && SatisfyQuestSkill(quest, msg) && SatisfyQuestReputation(quest, msg)
            && SatisfyQuestPreviousQuest(quest, msg) && SatisfyQuestTimed(quest, msg)
            && SatisfyQuestNextChain(quest, msg) && SatisfyQuestPrevChain(quest, msg)
+           && SatisfyQuestBreadcrumb(quest, msg)
            && SatisfyQuestDay(quest, msg) && SatisfyQuestWeek(quest, msg)
            && SatisfyQuestMonth(quest, msg) && SatisfyQuestSeasonal(quest, msg)
            && SatisfyQuestConditions(quest, msg);
@@ -279,13 +281,14 @@ bool Player::CanAddQuest(Quest const* quest, bool msg)
         else if (msg2 != EQUIP_ERR_OK)
         {
             SendEquipError(msg2, nullptr, nullptr, srcitem);
+            PlayDirectSound(QUEST_SOUND_FAILURE, this); // Play failure sound
             return false;
         }
     }
     return true;
 }
 
-bool Player::CanCompleteQuest(uint32 quest_id, const QuestStatusData* q_savedStatus)
+bool Player::CanCompleteQuest(uint32 quest_id, QuestStatusData const* q_savedStatus)
 {
     if (quest_id)
     {
@@ -294,7 +297,7 @@ bool Player::CanCompleteQuest(uint32 quest_id, const QuestStatusData* q_savedSta
             return false;
 
         // Xinef: take seasonals into account
-        if(!qInfo->IsRepeatable() && !qInfo->IsSeasonal() && IsQuestRewarded(quest_id))
+        if (!qInfo->IsRepeatable() && !qInfo->IsSeasonal() && IsQuestRewarded(quest_id))
             return false;                                   // not allow re-complete quest
 
         // auto complete quest
@@ -420,6 +423,7 @@ bool Player::CanRewardQuest(Quest const* quest, bool msg)
 void Player::AddQuestAndCheckCompletion(Quest const* quest, Object* questGiver)
 {
     AddQuest(quest, questGiver);
+    sScriptMgr->OnPlayerQuestAccept(this, quest);
 
     if (CanCompleteQuest(quest->GetQuestId()))
         CompleteQuest(quest->GetQuestId());
@@ -469,6 +473,16 @@ bool Player::CanRewardQuest(Quest const* quest, uint32 reward, bool msg)
     // prevent receive reward with quest items in bank or for not completed quest
     if (!CanRewardQuest(quest, msg))
         return false;
+
+    // gate the actual turn-in here rather than in the overload above, which LFG also uses
+    // as a "already did today's random" probe
+    if (HasPlayerFlag(PLAYER_FLAGS_NO_PLAY_TIME))
+    {
+        if (msg)
+            GetSession()->SendPlayTimeWarning(PTF_UNHEALTHY_TIME, 0);
+
+        return false;
+    }
 
     ItemPosCountVec dest;
     if (quest->GetRewChoiceItemsCount() > 0)
@@ -601,7 +615,7 @@ void Player::CompleteQuest(uint32 quest_id)
         return;
     }
 
-    if (!sScriptMgr->OnBeforePlayerQuestComplete(this, quest_id))
+    if (!sScriptMgr->OnPlayerBeforeQuestComplete(this, quest_id))
     {
         return;
     }
@@ -617,6 +631,9 @@ void Player::CompleteQuest(uint32 quest_id)
     Quest const* qInfo = sObjectMgr->GetQuestTemplate(quest_id);
     if (qInfo && qInfo->HasFlag(QUEST_FLAGS_TRACKING))
     {
+        // auto-rewarded, so CAIS cannot gate it here: the status is already COMPLETE above and
+        // nothing re-triggers the quest, which would destroy the reward rather than defer it.
+        // RewardQuest still zeroes the money and GiveXP still blocks the XP.
         RewardQuest(qInfo, 0, this, false);
     }
 
@@ -698,7 +715,7 @@ void Player::RewardQuest(Quest const* quest, uint32 reward, Object* questGiver, 
                 Item* item = StoreNewItem(dest, itemId, true);
                 SendNewItem(item, quest->RewardChoiceItemCount[reward], true, false, false, false);
 
-                sScriptMgr->OnQuestRewardItem(this, item, quest->RewardChoiceItemCount[reward]);
+                sScriptMgr->OnPlayerQuestRewardItem(this, item, quest->RewardChoiceItemCount[reward]);
             }
             else
             {
@@ -719,7 +736,7 @@ void Player::RewardQuest(Quest const* quest, uint32 reward, Object* questGiver, 
                     Item* item = StoreNewItem(dest, itemId, true);
                     SendNewItem(item, quest->RewardItemIdCount[i], true, false, false, false);
 
-                    sScriptMgr->OnQuestRewardItem(this, item, quest->RewardItemIdCount[i]);
+                    sScriptMgr->OnPlayerQuestRewardItem(this, item, quest->RewardItemIdCount[i]);
                 }
                 else
                     problematicItems.emplace_back(itemId, quest->RewardItemIdCount[i]);
@@ -739,20 +756,20 @@ void Player::RewardQuest(Quest const* quest, uint32 reward, Object* questGiver, 
     if (log_slot < MAX_QUEST_LOG_SIZE)
         SetQuestSlot(log_slot, 0);
 
-    bool rewarded = IsQuestRewarded(quest_id) && !quest->IsDFQuest();
+    bool const rewarded = IsQuestRewarded(quest_id) && !quest->IsDFQuest() && !(quest->IsDaily() || quest->IsWeekly() || quest->IsMonthly());
 
-    // Not give XP in case already completed once repeatable quest
+    // Repeatable quests (not time-based reset ones) should not give XP on subsequent completions
     uint32 XP = rewarded ? 0 : CalculateQuestRewardXP(quest);
 
-    sScriptMgr->OnQuestComputeXP(this, quest, XP);
+    sScriptMgr->OnPlayerQuestComputeXP(this, quest, XP);
     int32 moneyRew = 0;
-    if (GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL) || sScriptMgr->ShouldBeRewardedWithMoneyInsteadOfExp(this))
+    if (GetLevel() >= sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL) || sScriptMgr->OnPlayerShouldBeRewardedWithMoneyInsteadOfExp(this))
     {
         moneyRew = quest->GetRewMoneyMaxLevel();
     }
     else
     {
-        sScriptMgr->OnGivePlayerXP(this, XP, nullptr, isLFGReward ? PlayerXPSource::XPSOURCE_QUEST_DF : PlayerXPSource::XPSOURCE_QUEST);
+        sScriptMgr->OnPlayerGiveXP(this, XP, nullptr, isLFGReward ? PlayerXPSource::XPSOURCE_QUEST_DF : PlayerXPSource::XPSOURCE_QUEST);
         GiveXP(XP, nullptr, 1.0f, isLFGReward);
     }
 
@@ -760,6 +777,16 @@ void Player::RewardQuest(Quest const* quest, uint32 reward, Object* questGiver, 
     if (int32 rewOrReqMoney = quest->GetRewOrReqMoney(GetLevel()))
     {
         moneyRew += rewOrReqMoney;
+    }
+
+    // CAIS reduces quest money, mirroring looted money and XP. Applied here as well as at the
+    // turn-in gate because LFG and auto-complete quests reach RewardQuest without CanRewardQuest.
+    if (moneyRew > 0)
+    {
+        if (HasPlayerFlag(PLAYER_FLAGS_NO_PLAY_TIME))
+            moneyRew = 0;
+        else if (HasPlayerFlag(PLAYER_FLAGS_PARTIAL_PLAY_TIME))
+            moneyRew /= 2;
     }
 
     if (moneyRew)
@@ -819,8 +846,7 @@ void Player::RewardQuest(Quest const* quest, uint32 reward, Object* questGiver, 
         SetSeasonalQuestStatus(quest_id);
 
     RemoveActiveQuest(quest_id, false);
-    m_RewardedQuests.insert(quest_id);
-    m_RewardedQuestsSave[quest_id] = true;
+    SetRewardedQuest(quest_id);
 
     if (announce)
         SendQuestReward(quest, XP);
@@ -877,6 +903,12 @@ void Player::RewardQuest(Quest const* quest, uint32 reward, Object* questGiver, 
     sScriptMgr->OnPlayerCompleteQuest(this, quest);
 }
 
+void Player::SetRewardedQuest(uint32 quest_id)
+{
+    m_RewardedQuests.insert(quest_id);
+    m_RewardedQuestsSave[quest_id] = true;
+}
+
 void Player::FailQuest(uint32 questId)
 {
     if (Quest const* quest = sObjectMgr->GetQuestTemplate(questId))
@@ -918,6 +950,21 @@ void Player::FailQuest(uint32 questId)
             if (ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(quest->ItemDrop[i]))
                 if (quest->ItemDropQuantity[i] > 0 && itemTemplate->Bonding == BIND_QUEST_ITEM)
                     DestroyItemCount(quest->ItemDrop[i], quest->ItemDropQuantity[i], true);
+    }
+}
+
+void Player::FailQuestsOnDeath()
+{
+    for (auto& [id, statusData] : m_QuestStatus)
+    {
+        if (statusData.Status != QUEST_STATUS_INCOMPLETE)
+            continue;
+
+        Quest const* quest = sObjectMgr->GetQuestTemplate(id);
+        if (!quest || !quest->HasFlag(QUEST_FLAGS_STAY_ALIVE))
+            continue;
+
+        FailQuest(id);
     }
 }
 
@@ -983,8 +1030,7 @@ bool Player::SatisfyQuestLog(bool msg)
 
     if (msg)
     {
-        WorldPacket data(SMSG_QUESTLOG_FULL, 0);
-        GetSession()->SendPacket(&data);
+        SendDirectMessage(WorldPackets::Quest::QuestLogFull().Write());
         LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTLOG_FULL");
     }
     return false;
@@ -1211,6 +1257,39 @@ bool Player::SatisfyQuestExclusiveGroup(Quest const* qInfo, bool msg) const
     return true;
 }
 
+bool Player::SatisfyQuestBreadcrumb(Quest const* qInfo, bool msg) const
+{
+    uint32 breadcrumbForQuestId = qInfo->GetBreadcrumbForQuestId();
+    if (breadcrumbForQuestId)
+    {
+        QuestStatus status = GetQuestStatus(breadcrumbForQuestId);
+        if (status != QUEST_STATUS_NONE || IsQuestRewarded(breadcrumbForQuestId))
+        {
+            if (msg)
+                SendCanTakeQuestResponse(INVALIDREASON_DONT_HAVE_REQ);
+
+            return false;
+        }
+    }
+
+    if (std::vector<uint32> const* breadcrumbs = sObjectMgr->GetBreadcrumbsForQuest(qInfo->GetQuestId()))
+    {
+        for (uint32 breadcrumbQuestId : *breadcrumbs)
+        {
+            QuestStatus status = GetQuestStatus(breadcrumbQuestId);
+            if (status == QUEST_STATUS_INCOMPLETE || status == QUEST_STATUS_COMPLETE || status == QUEST_STATUS_FAILED)
+            {
+                if (msg)
+                    SendCanTakeQuestResponse(INVALIDREASON_DONT_HAVE_REQ);
+
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool Player::SatisfyQuestNextChain(Quest const* qInfo, bool msg) const
 {
     uint32 nextQuest = qInfo->GetNextQuestInChain();
@@ -1266,7 +1345,7 @@ bool Player::SatisfyQuestDay(Quest const* qInfo, bool msg) const
 
     if (qInfo->IsDFQuest())
     {
-        if (!m_DFQuests.empty())
+        if (m_DFQuests.find(qInfo->GetQuestId()) != m_DFQuests.end())
             return false;
 
         return true;
@@ -1395,13 +1474,14 @@ bool Player::TakeQuestSourceItem(uint32 questId, bool msg)
 
 uint32 Player::CalculateQuestRewardXP(Quest const* quest)
 {
+    uint8 level = GetLevel();
+    sScriptMgr->OnPlayerBeforeGetLevelForXPGain(this, level);
+
     // apply world quest rate
-    uint32 xp = uint32(quest->XPValue(GetLevel()) * GetQuestRate(quest->IsDFQuest()));
+    uint32 xp = uint32(quest->XPValue(level) * GetQuestRate(quest->IsDFQuest()));
 
     // handle SPELL_AURA_MOD_XP_QUEST_PCT auras
-    Unit::AuraEffectList const& ModXPPctAuras = GetAuraEffectsByType(SPELL_AURA_MOD_XP_QUEST_PCT);
-    for (Unit::AuraEffectList::const_iterator i = ModXPPctAuras.begin(); i != ModXPPctAuras.end(); ++i)
-        AddPct(xp, (*i)->GetAmount());
+    xp *= GetTotalAuraMultiplier(SPELL_AURA_MOD_XP_QUEST_PCT);
 
     return xp;
 }
@@ -1947,7 +2027,7 @@ void Player::KilledMonsterCredit(uint32 entry, ObjectGuid guid)
         if (q_status.Status == QUEST_STATUS_INCOMPLETE && (!GetGroup() || !GetGroup()->isRaidGroup() || qInfo->IsAllowedInRaid(GetMap()->GetDifficulty()) ||
                                                            (qInfo->IsPVPQuest() && (GetGroup()->isBFGroup() || GetGroup()->isBGGroup()))))
         {
-            if (!sScriptMgr->PassedQuestKilledMonsterCredit(this, qInfo, entry, real_entry, guid))
+            if (!sScriptMgr->OnPlayerPassedQuestKilledMonsterCredit(this, qInfo, entry, real_entry, guid))
                 continue;
 
             if (qInfo->HasSpecialFlag(QUEST_SPECIAL_FLAGS_KILL) /*&& !qInfo->HasSpecialFlag(QUEST_SPECIAL_FLAGS_CAST)*/)
@@ -2339,13 +2419,13 @@ bool Player::HasQuestForItem(uint32 itemid, uint32 excludeQuestId /* 0 */, bool 
 
 void Player::SendQuestComplete(uint32 quest_id)
 {
-    if (quest_id)
-    {
-        WorldPacket data(SMSG_QUESTUPDATE_COMPLETE, 4);
-        data << uint32(quest_id);
-        GetSession()->SendPacket(&data);
-        LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_COMPLETE quest = {}", quest_id);
-    }
+    if (!quest_id)
+        return;
+
+    WorldPackets::Quest::QuestUpdateComplete questUpdateComplete;
+    questUpdateComplete.QuestId = quest_id;
+    SendDirectMessage(questUpdateComplete.Write());
+    LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_COMPLETE quest = {}", quest_id);
 }
 
 void Player::SendQuestReward(Quest const* quest, uint32 XP)
@@ -2353,58 +2433,54 @@ void Player::SendQuestReward(Quest const* quest, uint32 XP)
     uint32 questid = quest->GetQuestId();
     LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_QUEST_COMPLETE quest = {}", questid);
     sGameEventMgr->HandleQuestComplete(questid);
-    WorldPacket data(SMSG_QUESTGIVER_QUEST_COMPLETE, (4 + 4 + 4 + 4 + 4));
-    data << uint32(questid);
+    WorldPackets::Quest::QuestGiverQuestComplete questGiverQuestComplete;
+    questGiverQuestComplete.QuestId = questid;
+    uint32 rewardMoney = quest->GetRewOrReqMoney(GetLevel());
 
     if (!IsMaxLevel())
-    {
-        data << uint32(XP);
-        data << uint32(quest->GetRewOrReqMoney(GetLevel()));
-    }
+        questGiverQuestComplete.Experience = XP;
     else
-    {
-        data << uint32(0);
-        data << uint32(quest->GetRewOrReqMoney(GetLevel()) + quest->GetRewMoneyMaxLevel());
-    }
+        rewardMoney += quest->GetRewMoneyMaxLevel();
 
-    data << uint32(10 * quest->CalculateHonorGain(GetQuestLevel(quest)));
-    data << uint32(quest->GetBonusTalents());              // bonus talents
-    data << uint32(quest->GetRewArenaPoints());
-    GetSession()->SendPacket(&data);
+    questGiverQuestComplete.RewardMoney = rewardMoney;
+    questGiverQuestComplete.RewardHonor = 10 * quest->CalculateHonorGain(GetQuestLevel(quest));
+    questGiverQuestComplete.RewardTalents = quest->GetBonusTalents();
+    questGiverQuestComplete.RewardArena = quest->GetRewArenaPoints();
+    SendDirectMessage(questGiverQuestComplete.Write());
 }
 
 void Player::SendQuestFailed(uint32 questId, InventoryResult reason)
 {
-    if (questId)
-    {
-        WorldPacket data(SMSG_QUESTGIVER_QUEST_FAILED, 4 + 4);
-        data << uint32(questId);
-        data << uint32(reason);                             // failed reason (valid reasons: 4, 16, 50, 17, 74, other values show default message)
-        GetSession()->SendPacket(&data);
-        LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_QUEST_FAILED");
-    }
+    if (!questId)
+        return;
+
+    WorldPackets::Quest::QuestGiverQuestFailed questGiverQuestFailed;
+    questGiverQuestFailed.QuestId = questId;
+    questGiverQuestFailed.FailureReason = reason; // failed reason (valid reasons: 4, 16, 50, 17, 74, other values show default message)
+    SendDirectMessage(questGiverQuestFailed.Write());
+    LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_QUEST_FAILED");
 }
 
 void Player::SendQuestTimerFailed(uint32 quest_id)
 {
-    if (quest_id)
-    {
-        WorldPacket data(SMSG_QUESTUPDATE_FAILEDTIMER, 4);
-        data << uint32(quest_id);
-        GetSession()->SendPacket(&data);
-        LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_FAILEDTIMER");
-    }
+    if (!quest_id)
+        return;
+
+    WorldPackets::Quest::QuestUpdateFailedTimer questUpdateFailedTimer;
+    questUpdateFailedTimer.QuestId = quest_id;
+    SendDirectMessage(questUpdateFailedTimer.Write());
+    LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_FAILEDTIMER");
 }
 
-void Player::SendCanTakeQuestResponse(uint32 msg) const
+void Player::SendCanTakeQuestResponse(QuestFailedReason msg) const
 {
-    WorldPacket data(SMSG_QUESTGIVER_QUEST_INVALID, 4);
-    data << uint32(msg);
-    GetSession()->SendPacket(&data);
+    WorldPackets::Quest::QuestGiverQuestInvalid questGiverQuestInvalid;
+    questGiverQuestInvalid.FailureReason = msg;
+    SendDirectMessage(questGiverQuestInvalid.Write());
     LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTGIVER_QUEST_INVALID");
 }
 
-void Player::SendQuestConfirmAccept(const Quest* quest, Player* pReceiver)
+void Player::SendQuestConfirmAccept(Quest const* quest, Player* pReceiver)
 {
     if (pReceiver)
     {
@@ -2413,38 +2489,39 @@ void Player::SendQuestConfirmAccept(const Quest* quest, Player* pReceiver)
 
         int loc_idx = pReceiver->GetSession()->GetSessionDbLocaleIndex();
         if (loc_idx >= 0)
-            if (const QuestLocale* pLocale = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
+            if (QuestLocale const* pLocale = sObjectMgr->GetQuestLocale(quest->GetQuestId()))
                 ObjectMgr::GetLocaleString(pLocale->Title, loc_idx, strTitle);
 
-        WorldPacket data(SMSG_QUEST_CONFIRM_ACCEPT, (4 + quest->GetTitle().size() + 8));
-        data << uint32(quest->GetQuestId());
-        data << quest->GetTitle();
-        data << GetGUID();
-        pReceiver->GetSession()->SendPacket(&data);
+        WorldPackets::Quest::QuestConfirmAccept questConfirmAccept;
+        questConfirmAccept.QuestId = quest->GetQuestId();
+        questConfirmAccept.QuestTitle = quest->GetTitle();
+        questConfirmAccept.PlayerGuid = GetGUID();
+        pReceiver->SendDirectMessage(questConfirmAccept.Write());
 
         LOG_DEBUG("network", "WORLD: Sent SMSG_QUEST_CONFIRM_ACCEPT");
     }
 }
 
-void Player::SendPushToPartyResponse(Player const* player, uint8 msg) const
+void Player::SendPushToPartyResponse(Player const* player, QuestShareMessages msg) const
 {
-    if (player)
-    {
-        WorldPacket data(MSG_QUEST_PUSH_RESULT, (8 + 1));
-        data << player->GetGUID();
-        data << uint8(msg);                                 // valid values: 0-8
-        GetSession()->SendPacket(&data);
-        LOG_DEBUG("network", "WORLD: Sent MSG_QUEST_PUSH_RESULT");
-    }
+    if (!player)
+        return;
+
+    WorldPackets::Quest::QuestPushResult questPushResult;
+    questPushResult.PlayerGuid = player->GetGUID();
+    questPushResult.QuestShareMessage = msg;
+    SendDirectMessage(questPushResult.Write());
+    LOG_DEBUG("network", "WORLD: Sent MSG_QUEST_PUSH_RESULT");
 }
 
 void Player::SendQuestUpdateAddItem(Quest const* /*quest*/, uint32 /*item_idx*/, uint16 /*count*/)
 {
-    WorldPacket data(SMSG_QUESTUPDATE_ADD_ITEM, 0);
+    // Packet is intentionally sent empty; the optional payload (item id and
+    // count) is not required by the 3.3.5 client:
+    //questUpdateAddItem.ItemId = quest->RequiredItemId[item_idx];
+    //questUpdateAddItem.Count = count;
+    SendDirectMessage(WorldPackets::Quest::QuestUpdateAddItem().Write());
     LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_ADD_ITEM");
-    //data << quest->RequiredItemId[item_idx];
-    //data << count;
-    GetSession()->SendPacket(&data);
 }
 
 void Player::SendQuestUpdateAddCreatureOrGo(Quest const* quest, ObjectGuid guid, uint32 creatureOrGO_idx, uint16 old_count, uint16 add_count)
@@ -2456,14 +2533,14 @@ void Player::SendQuestUpdateAddCreatureOrGo(Quest const* quest, ObjectGuid guid,
         // client expected gameobject template id in form (id|0x80000000)
         entry = (-entry) | 0x80000000;
 
-    WorldPacket data(SMSG_QUESTUPDATE_ADD_KILL, (4 * 4 + 8));
+    WorldPackets::Quest::QuestUpdateAddKill questUpdateAddKill;
+    questUpdateAddKill.QuestId = quest->GetQuestId();
+    questUpdateAddKill.CreatureEntry = entry;
+    questUpdateAddKill.CurrentCount = old_count + add_count;
+    questUpdateAddKill.RequiredCount = quest->RequiredNpcOrGoCount[creatureOrGO_idx];
+    questUpdateAddKill.ObjectiveGuid = guid;
+    SendDirectMessage(questUpdateAddKill.Write());
     LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_ADD_KILL");
-    data << uint32(quest->GetQuestId());
-    data << uint32(entry);
-    data << uint32(old_count + add_count);
-    data << uint32(quest->RequiredNpcOrGoCount[ creatureOrGO_idx ]);
-    data << guid;
-    GetSession()->SendPacket(&data);
 
     uint16 log_slot = FindQuestSlot(quest->GetQuestId());
     if (log_slot < MAX_QUEST_LOG_SIZE)
@@ -2474,12 +2551,12 @@ void Player::SendQuestUpdateAddPlayer(Quest const* quest, uint16 old_count, uint
 {
     ASSERT(old_count + add_count < 65536 && "player count store in 16 bits");
 
-    WorldPacket data(SMSG_QUESTUPDATE_ADD_PVP_KILL, (3 * 4));
+    WorldPackets::Quest::QuestUpdateAddPvPKill questUpdateAddPvPKill;
+    questUpdateAddPvPKill.QuestId = quest->GetQuestId();
+    questUpdateAddPvPKill.CurrentCount = old_count + add_count;
+    questUpdateAddPvPKill.RequiredCount = quest->GetPlayersSlain();
+    SendDirectMessage(questUpdateAddPvPKill.Write());
     LOG_DEBUG("network", "WORLD: Sent SMSG_QUESTUPDATE_ADD_PVP_KILL");
-    data << uint32(quest->GetQuestId());
-    data << uint32(old_count + add_count);
-    data << uint32(quest->GetPlayersSlain());
-    GetSession()->SendPacket(&data);
 
     uint16 log_slot = FindQuestSlot(quest->GetQuestId());
     if (log_slot < MAX_QUEST_LOG_SIZE)

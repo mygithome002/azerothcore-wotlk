@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -19,12 +19,13 @@
 #define DBUpdater_h__
 
 #include "DatabaseEnv.h"
+#include "DatabaseUpdatePool.h"
 #include "Define.h"
+#include "QueryResult.h"
 #include <filesystem>
 #include <string>
-
-template <class T>
-class DatabaseWorkerPool;
+#include <string_view>
+#include <vector>
 
 namespace boost
 {
@@ -59,8 +60,24 @@ public:
 
     static bool CheckExecutable();
 
+    // Counts every update file that failed to apply, in any mode. A dry run does not throw
+    // on a bad file, so it keeps going and a single run reports all of them; whoever ends
+    // the run must check this and exit non-zero, otherwise CI goes green on a failed import.
+    static void MarkUpdateFailed();
+    static uint32 GetFailedUpdateCount();
+
 private:
     static std::string& corrected_path();
+    static uint32& failed_updates();
+};
+
+// Runtime metadata the updater needs about one database, core or module owned.
+struct DBUpdaterInfo
+{
+    std::string displayName;        // name used in log output
+    std::string sourceDirectory;    // root directory holding the sql tree
+    std::string baseFilesDirectory; // base *.sql files, trailing separator optional
+    std::string dbModuleName;       // update-fetcher module name, must be lowercase
 };
 
 template <class T>
@@ -71,6 +88,7 @@ public:
 
     static inline std::string GetConfigEntry();
     static inline std::string GetTableName();
+    static std::string GetSourceDirectory();
     static std::string GetBaseFilesDirectory();
     static bool IsEnabled(uint32 const updateMask);
     static BaseLocation GetBaseLocationType();
@@ -83,11 +101,18 @@ public:
     static std::string GetDBModuleName();
 
 private:
-    static QueryResult Retrieve(DatabaseWorkerPool<T>& pool, std::string const& query);
-    static void Apply(DatabaseWorkerPool<T>& pool, std::string const& query);
-    static void ApplyFile(DatabaseWorkerPool<T>& pool, Path const& path);
-    static void ApplyFile(DatabaseWorkerPool<T>& pool, std::string const& host, std::string const& user,
-                          std::string const& password, std::string const& port_or_socket, std::string const& database, std::string const& ssl, Path const& path);
+    static DBUpdaterInfo GetUpdaterInfo();
+};
+
+// Non-template updater entry points for module-owned pools (see ModuleDatabasePool).
+// Mirrors the DBUpdater<T> flow: Create the schema when missing, Populate an empty
+// database from the base files, then apply pending updates through the UpdateFetcher.
+class AC_DATABASE_API ModuleDBUpdater
+{
+public:
+    static bool Create(DatabaseUpdatePool& pool);
+    static bool Update(DatabaseUpdatePool& pool, DBUpdaterInfo const& info, std::string_view modulesList = {});
+    static bool Populate(DatabaseUpdatePool& pool, DBUpdaterInfo const& info);
 };
 
 #endif // DBUpdater_h__

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -20,7 +20,6 @@
 
 #include "Common.h"
 #include "G3D/Vector3.h"
-#include <cmath>
 
 class ByteBuffer;
 
@@ -32,7 +31,7 @@ struct Position
     Position(Position const& loc) { Relocate(loc); }
     /* requried as of C++ 11 */
     Position(Position&&) = default;
-    Position& operator=(const Position&) = default;
+    Position& operator=(Position const&) = default;
     Position& operator=(Position&&) = default;
 
     struct PositionXYStreamer
@@ -65,6 +64,11 @@ struct Position
         return !(operator==(a));
     }
 
+    inline bool operator!=(Position const& a) const
+    {
+        return !(operator==(a));
+    }
+
     operator G3D::Vector3() const
     {
         return { m_positionX, m_positionY, m_positionZ };
@@ -91,7 +95,7 @@ struct Position
         m_orientation = orientation;
     }
 
-    void Relocate(const Position& pos)
+    void Relocate(Position const& pos)
     {
         m_positionX = pos.m_positionX;
         m_positionY = pos.m_positionY;
@@ -99,7 +103,7 @@ struct Position
         m_orientation = pos.m_orientation;
     }
 
-    void Relocate(const Position* pos)
+    void Relocate(Position const* pos)
     {
         m_positionX = pos->m_positionX;
         m_positionY = pos->m_positionY;
@@ -108,7 +112,7 @@ struct Position
     }
 
     void RelocatePolarOffset(float angle, float dist, float z = 0.0f);
-    void RelocateOffset(const Position& offset);
+    void RelocateOffset(Position const& offset);
     void SetOrientation(float orientation)
     {
         m_orientation = orientation;
@@ -179,10 +183,10 @@ struct Position
     [[nodiscard]] float GetExactDist(Position const& pos) const { return GetExactDist(pos.m_positionX, pos.m_positionY, pos.m_positionZ); }
     float GetExactDist(Position const* pos) const { return GetExactDist(*pos); }
 
-    void GetPositionOffsetTo(const Position& endPos, Position& retOffset) const;
+    void GetPositionOffsetTo(Position const& endPos, Position& retOffset) const;
     [[nodiscard]] Position GetPositionWithOffset(Position const& offset) const;
 
-    float GetAngle(const Position* pos) const;
+    float GetAngle(Position const* pos) const;
     [[nodiscard]] float GetAngle(float x, float y) const;
     [[nodiscard]] float GetAbsoluteAngle(float x, float y) const
     {
@@ -194,7 +198,7 @@ struct Position
     [[nodiscard]] float GetAbsoluteAngle(Position const& pos) const { return GetAbsoluteAngle(pos.m_positionX, pos.m_positionY); }
     [[nodiscard]] float GetAbsoluteAngle(Position const* pos) const { return GetAbsoluteAngle(*pos); }
 
-    float GetRelativeAngle(const Position* pos) const
+    float GetRelativeAngle(Position const* pos) const
     {
         return NormalizeOrientation(GetAngle(pos) - m_orientation);
     }
@@ -209,7 +213,7 @@ struct Position
         return GetExactDist2dSq(x, y) < dist * dist;
     }
 
-    bool IsInDist2d(const Position* pos, float dist) const
+    bool IsInDist2d(Position const* pos, float dist) const
     {
         return GetExactDist2dSq(pos) < dist * dist;
     }
@@ -219,14 +223,15 @@ struct Position
         return GetExactDistSq(x, y, z) < dist * dist;
     }
 
-    bool IsInDist(const Position* pos, float dist) const
+    bool IsInDist(Position const* pos, float dist) const
     {
         return GetExactDistSq(pos) < dist * dist;
     }
 
-    [[nodiscard]] bool IsWithinBox(const Position& center, float xradius, float yradius, float zradius) const;
-    bool HasInArc(float arcangle, const Position* pos, float targetRadius = 0.0f) const;
+    [[nodiscard]] bool IsWithinBox(Position const& center, float xradius, float yradius, float zradius) const;
+    bool HasInArc(float arcangle, Position const* pos, float targetRadius = 0.0f) const;
     bool HasInLine(Position const* pos, float width) const;
+    bool HasInLine(Position const* pos, float objSize, float width) const;
     [[nodiscard]] std::string ToString() const;
 
     // modulos a radian orientation to the range of 0..2PI
@@ -256,7 +261,7 @@ public:
     WorldLocation(uint32 mapId, Position const& position)
             : Position(position), m_mapId(mapId) { }
 
-    void WorldRelocate(const WorldLocation& loc)
+    void WorldRelocate(WorldLocation const& loc)
     {
         m_mapId = loc.GetMapId();
         Relocate(loc);

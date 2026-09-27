@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -16,6 +16,7 @@
  */
 
 #include "CreatureScript.h"
+#include "ObjectAccessor.h"
 #include "ScriptedCreature.h"
 #include "SpellScriptLoader.h"
 #include "black_temple.h"
@@ -27,67 +28,67 @@
 
 enum Says
 {
-    SAY_BROKEN_FREE_0               = 0,
-    SAY_BROKEN_FREE_1               = 1,
-    SAY_BROKEN_FREE_2               = 2,
-    SAY_LOW_HEALTH                  = 3,
-    SAY_DEATH                       = 4,
+    SAY_BROKEN_FREE_0                       = 0,
+    SAY_BROKEN_FREE_1                       = 1,
+    SAY_BROKEN_FREE_2                       = 2,
+    SAY_LOW_HEALTH                          = 3,
+    SAY_DEATH                               = 4,
 
-    SAY_BROKEN_S1                   = 0,
-    SAY_BROKEN_S2                   = 1
+    SAY_BROKEN_S1                           = 0,
+    SAY_BROKEN_S2                           = 1
 };
 
 enum Spells
 {
     // Akama
-    SPELL_STEALTH                   = 34189,
-    SPELL_DESTRUCTIVE_POISON        = 40874,
-    SPELL_CHAIN_LIGHTNING           = 39945,
-    SPELL_AKAMA_SOUL_CHANNEL        = 40447,
-    SPELL_FIXATE                    = 40607,
-    SPELL_AKAMA_SOUL_RETRIEVE       = 40902,    // epilogue
-    SPELL_AKAMA_SOUL_EXPEL_CHANNEL  = 40927,    // epilogue
+    SPELL_STEALTH                           = 34189,
+    SPELL_DESTRUCTIVE_POISON                = 40874,
+    SPELL_CHAIN_LIGHTNING                   = 39945,
+    SPELL_AKAMA_SOUL_CHANNEL                = 40447,
+    SPELL_FIXATE                            = 40607,
+    SPELL_AKAMA_SOUL_RETRIEVE               = 40902,    // epilogue
+    SPELL_AKAMA_SOUL_EXPEL_CHANNEL          = 40927,    // epilogue
 
     // Shade & Channelers
-    SPELL_SHADE_SOUL_CHANNEL        = 40401,
-    SPELL_THREAT                    = 41602,
-    SPELL_SHADE_OF_AKAMA_TRIGGER    = 40955,
+    SPELL_SHADE_SOUL_CHANNEL                = 40401,
+    SPELL_THREAT                            = 41602,
+    SPELL_SHADE_OF_AKAMA_TRIGGER            = 40955,
 
     // Summons
-    SPELL_ASHTONGUE_WAVE_A          = 42073,   // unused
-    SPELL_ASHTONGUE_WAVE_B          = 42035,
-    SPELL_SUMMON_ASHTONGUE_SORCERER = 40476,
-    SPELL_SUMMON_ASHTONGUE_DEFENDER = 40474
+    SPELL_ASHTONGUE_WAVE_A                  = 42073,   // unused
+    SPELL_ASHTONGUE_WAVE_B                  = 42035,
+    SPELL_SUMMON_ASHTONGUE_SORCERER         = 40476,
+    SPELL_SUMMON_ASHTONGUE_DEFENDER         = 40474
 };
 
 enum Creatures
 {
-    NPC_ASHTONGUE_SORCERER          = 23215,
-    NPC_ASHTONGUE_DEFENDER          = 23216,
-    NPC_ASHTONGUE_ELEMENTAL         = 23523,
-    NPC_ASHTONGUE_ROGUE             = 23318,
-    NPC_ASHTONGUE_SPIRITBIND        = 23524,
-    NPC_ASHTONGUE_BROKEN            = 23319
+    NPC_ASHTONGUE_SORCERER                  = 23215,
+    NPC_ASHTONGUE_DEFENDER                  = 23216,
+    NPC_ASHTONGUE_ELEMENTAL                 = 23523,
+    NPC_ASHTONGUE_ROGUE                     = 23318,
+    NPC_ASHTONGUE_SPIRITBIND                = 23524,
+    NPC_ASHTONGUE_BROKEN                    = 23319
 };
 
 enum Misc
 {
-    SUMMON_GROUP_BROKENS            = 1,
+    SUMMON_GROUP_BROKENS                    = 1,
 
-    POINT_ENGAGE                    = 0,
-    POINT_OUTRO                     = 1,
+    POINT_ENGAGE                            = 0,
+    POINT_OUTRO                             = 1,
 
-    ACTION_GENERATOR_START          = 1,
-    ACTION_GENERATOR_STOP           = 2,
-    ACTION_GENERATOR_DESPAWN_ALL    = 3,
+    ACTION_GENERATOR_START                  = 1,
+    ACTION_GENERATOR_STOP                   = 2,
+    ACTION_GENERATOR_DESPAWN_ALL            = 3,
+    ACTION_GENERATOR_DESPAWN_NON_DEFENDERS  = 4,
 
-    COUNTER_SPAWNS_MAX              = 20,   // Max number of spawns for each generator, number chosen at random
+    COUNTER_SPAWNS_MAX                      = 20,   // Max number of spawns for each generator, number chosen at random
 
-    ACTION_AKAMA_START_OUTRO        = 1,
+    ACTION_AKAMA_START_OUTRO                = 1,
 
-    FACTION_DEFAULT                 = 1820,
-    FACTION_ENGAGE                  = 1868,
-    FACTION_DEFENDER                = 1847
+    FACTION_DEFAULT                         = 1820,
+    FACTION_MONSTER_SPAR                    = 1847
 };
 
 Position AkamaEngage = { 517.4877f, 400.79926f, 112.77704f };
@@ -98,8 +99,8 @@ struct boss_shade_of_akama : public BossAI
 {
     boss_shade_of_akama(Creature* creature) : BossAI(creature, DATA_SHADE_OF_AKAMA) { }
 
-    std::list<Creature*> channelers;
-    std::list<Creature*> generators;
+    GuidVector channelers;
+    GuidVector generators;
 
     void Reset() override
     {
@@ -114,11 +115,13 @@ struct boss_shade_of_akama : public BossAI
 
     void EnterEvadeMode(EvadeReason why) override
     {
-        for (Creature* generator : generators)
-            generator->AI()->DoAction(ACTION_GENERATOR_DESPAWN_ALL);
+        for (ObjectGuid const& generatorGuid : generators)
+            if (Creature* generator = ObjectAccessor::GetCreature(*me, generatorGuid))
+                generator->AI()->DoAction(ACTION_GENERATOR_DESPAWN_ALL);
 
-        for (Creature* channeler : channelers)
-            channeler->SetUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+        for (ObjectGuid const& channelerGuid : channelers)
+            if (Creature* channeler = ObjectAccessor::GetCreature(*me, channelerGuid))
+                channeler->SetUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
 
         BossAI::EnterEvadeMode(why);
     }
@@ -128,8 +131,9 @@ struct boss_shade_of_akama : public BossAI
         BossAI::JustDied(killer);
         me->CastSpell(me, SPELL_SHADE_OF_AKAMA_TRIGGER, true);
 
-        for (Creature* generator : generators)
-            generator->AI()->DoAction(ACTION_GENERATOR_DESPAWN_ALL);
+        for (ObjectGuid const& generatorGuid : generators)
+            if (Creature* generator = ObjectAccessor::GetCreature(*me, generatorGuid))
+                generator->AI()->DoAction(ACTION_GENERATOR_DESPAWN_ALL);
 
         if (Creature* akama = instance->GetCreature(DATA_AKAMA_SHADE))
             akama->AI()->DoAction(ACTION_AKAMA_START_OUTRO);
@@ -141,14 +145,22 @@ struct boss_shade_of_akama : public BossAI
         {
             instance->SetBossState(DATA_SHADE_OF_AKAMA, IN_PROGRESS);
 
-            me->GetCreatureListWithEntryInGrid(channelers, NPC_ASHTONGUE_CHANNELER, 40.0f);
-            me->GetCreatureListWithEntryInGrid(generators, NPC_CREATURE_GENERATOR_AKAMA, 100.0f);
+            std::list<Creature*> channelerList;
+            std::list<Creature*> generatorList;
+            me->GetCreatureListWithEntryInGrid(channelerList, NPC_ASHTONGUE_CHANNELER, 40.0f);
+            me->GetCreatureListWithEntryInGrid(generatorList, NPC_CREATURE_GENERATOR_AKAMA, 100.0f);
 
-            for (Creature* channeler : channelers)
+            for (Creature* channeler : channelerList)
+            {
+                channelers.push_back(channeler->GetGUID());
                 channeler->RemoveUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+            }
 
-            for (Creature* generator : generators)
+            for (Creature* generator : generatorList)
+            {
+                generators.push_back(generator->GetGUID());
                 generator->AI()->DoAction(ACTION_GENERATOR_START);
+            }
 
             ScheduleTimedEvent(1200ms, [&]
             {
@@ -169,8 +181,9 @@ struct boss_shade_of_akama : public BossAI
             me->RemoveAurasDueToSpell(SPELL_AKAMA_SOUL_CHANNEL);
             scheduler.CancelAll();
 
-            for (Creature* generator : generators)
-                generator->AI()->DoAction(ACTION_GENERATOR_STOP);
+            for (ObjectGuid const& generatorGuid : generators)
+                if (Creature* generator = ObjectAccessor::GetCreature(*me, generatorGuid))
+                    generator->AI()->DoAction(ACTION_GENERATOR_STOP);
 
             if (Creature* akama = instance->GetCreature(DATA_AKAMA_SHADE))
             {
@@ -232,7 +245,7 @@ struct npc_akama_shade : public ScriptedAI
             {
             case POINT_ENGAGE:
                 me->SetHomePosition(me->GetPosition());
-                me->SetFaction(FACTION_ENGAGE);
+                me->SetFaction(FACTION_MONSTER_SPAR_BUDDY);
                 DoCastSelf(SPELL_AKAMA_SOUL_CHANNEL, true);
                 break;
             case POINT_OUTRO:
@@ -250,7 +263,7 @@ struct npc_akama_shade : public ScriptedAI
                 {
                     Talk(SAY_BROKEN_FREE_2);
                 }, 3);
-                ScheduleUniqueTimedEvent(52000ms, [&]
+                ScheduleUniqueTimedEvent(52s, [&]
                 {
                     std::list<Creature*> brokens;
                     me->GetCreatureListWithEntryInGrid(brokens, NPC_ASHTONGUE_BROKEN, 40.0f);
@@ -279,6 +292,11 @@ struct npc_akama_shade : public ScriptedAI
         else if (damage >= me->GetHealth() && !_died)
         {
             _died = true;
+            std::list<Creature*> generators;
+            me->GetCreatureListWithEntryInGrid(generators, NPC_CREATURE_GENERATOR_AKAMA, 100.0f);
+            for (Creature* generator : generators)
+                generator->AI()->DoAction(ACTION_GENERATOR_DESPAWN_ALL);
+
             damage = me->GetHealth() - 1;
             Talk(SAY_DEATH);
             if (Creature* shade = instance->GetCreature(DATA_SHADE_OF_AKAMA))
@@ -355,7 +373,6 @@ struct npc_creature_generator_akama : public ScriptedAI
 
     void Reset() override
     {
-        summons.DespawnAll();
         scheduler.CancelAll();
     }
 
@@ -363,6 +380,7 @@ struct npc_creature_generator_akama : public ScriptedAI
     {
         spawnCounter++;
         ScriptedAI::JustSummoned(summon);
+        summons.Summon(summon);
 
         switch (summon->GetEntry())
         {
@@ -374,13 +392,10 @@ struct npc_creature_generator_akama : public ScriptedAI
                 summon->GetMotionMaster()->MovePoint(POINT_ENGAGE, x, y, z);
             }
             break;
-        case NPC_ASHTONGUE_DEFENDER:
-            summon->SetFaction(FACTION_DEFENDER);
-            if (Creature* akama = instance->GetCreature(DATA_AKAMA_SHADE))
-                summon->AI()->AttackStart(akama);
-            break;
         default:
             summon->SetInCombatWithZone();
+            if (Creature* akama = instance->GetCreature(DATA_AKAMA_SHADE))
+                summon->AI()->AttackStart(akama);
             break;
         }
     }
@@ -388,7 +403,7 @@ struct npc_creature_generator_akama : public ScriptedAI
     void SummonedCreatureDies(Creature* summon, Unit*) override
     {
         spawnCounter--;
-        summon->DespawnOrUnsummon(10000);
+        summon->DespawnOrUnsummon(10s);
         summons.Despawn(summon);
     }
 
@@ -433,6 +448,14 @@ struct npc_creature_generator_akama : public ScriptedAI
         case ACTION_GENERATOR_DESPAWN_ALL:
             summons.DespawnAll();
             scheduler.CancelAll();
+            break;
+        case ACTION_GENERATOR_DESPAWN_NON_DEFENDERS:
+            summons.DoForAllSummons([&](WorldObject* summon)
+            {
+                if (Creature* c = summon->ToCreature())
+                    if (c->GetEntry() != NPC_ASHTONGUE_DEFENDER && c->GetEntry() != NPC_ASHTONGUE_SORCERER)
+                        c->DespawnOrUnsummon();
+            });
             break;
         }
     }

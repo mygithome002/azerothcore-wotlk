@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -33,9 +33,6 @@ enum UnitHook
     UNITHOOK_ON_AURA_APPLY,
     UNITHOOK_ON_AURA_REMOVE,
     UNITHOOK_IF_NORMAL_REACTION,
-    UNITHOOK_IS_NEEDMOD_SPELL_DAMAGE_PERCENT,
-    UNITHOOK_IS_NEEDMOD_MELEE_DAMAGE_PERCENT,
-    UNITHOOK_IS_NEEDMOD_HEAL_PERCENT,
     UNITHOOK_CAN_SET_PHASE_MASK,
     UNITHOOK_IS_CUSTOM_BUILD_VALUES_UPDATE,
     UNITHOOK_SHOULD_TRACK_VALUES_UPDATE_POS_BY_INDEX,
@@ -44,7 +41,9 @@ enum UnitHook
     UNITHOOK_ON_DISPLAYID_CHANGE,
     UNITHOOK_ON_UNIT_ENTER_EVADE_MODE,
     UNITHOOK_ON_UNIT_ENTER_COMBAT,
+    UNITHOOK_ON_UNIT_EXIT_COMBAT,
     UNITHOOK_ON_UNIT_DEATH,
+    UNITHOOK_ON_UNIT_SET_SHAPESHIFT_FORM,
     UNITHOOK_END
 };
 
@@ -55,7 +54,7 @@ struct BuildValuesCachePosPointers;
 class UnitScript : public ScriptObject
 {
 protected:
-    UnitScript(const char* name, bool addToScripts = true, std::vector<uint16> enabledHooks = std::vector<uint16>());
+    UnitScript(char const* name, bool addToScripts = true, std::vector<uint16> enabledHooks = std::vector<uint16>());
 
 public:
     // Called when a unit deals healing to another unit
@@ -88,12 +87,6 @@ public:
 
     [[nodiscard]] virtual bool IfNormalReaction(Unit const* /*unit*/, Unit const* /*target*/, ReputationRank& /*repRank*/) { return true; }
 
-    [[nodiscard]] virtual bool IsNeedModSpellDamagePercent(Unit const* /*unit*/, AuraEffect* /*auraEff*/, float& /*doneTotalMod*/, SpellInfo const* /*spellProto*/) { return true; }
-
-    [[nodiscard]] virtual bool IsNeedModMeleeDamagePercent(Unit const* /*unit*/, AuraEffect* /*auraEff*/, float& /*doneTotalMod*/, SpellInfo const* /*spellProto*/) { return true; }
-
-    [[nodiscard]] virtual bool IsNeedModHealPercent(Unit const* /*unit*/, AuraEffect* /*auraEff*/, float& /*doneTotalMod*/, SpellInfo const* /*spellProto*/) { return true; }
-
     [[nodiscard]] virtual bool CanSetPhaseMask(Unit const* /*unit*/, uint32 /*newPhaseMask*/, bool /*update*/) { return true; }
 
     [[nodiscard]] virtual bool IsCustomBuildValuesUpdate(Unit const* /*unit*/, uint8 /*updateType*/, ByteBuffer& /*fieldBuffer*/, Player const* /*target*/, uint16 /*index*/) { return false; }
@@ -114,7 +107,9 @@ public:
 
     virtual void OnUnitEnterEvadeMode(Unit* /*unit*/, uint8 /*evadeReason*/) { }
     virtual void OnUnitEnterCombat(Unit* /*unit*/, Unit* /*victim*/) { }
+    virtual void OnUnitExitCombat(Unit* /*unit*/) { }
     virtual void OnUnitDeath(Unit* /*unit*/, Unit* /*killer*/) { }
+    virtual void OnUnitSetShapeshiftForm(Unit* /*unit*/, uint8 /*form*/) { }
 };
 
 #endif

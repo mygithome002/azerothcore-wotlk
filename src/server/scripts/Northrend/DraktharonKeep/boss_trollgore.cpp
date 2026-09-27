@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -22,6 +22,7 @@
 #include "SpellScriptLoader.h"
 #include "drak_tharon_keep.h"
 #include "SpellAuraEffects.h"
+#include "SpellMgr.h"
 #include "SpellScript.h"
 
 enum Yells
@@ -54,8 +55,7 @@ enum Events
     EVENT_SPELL_CRUSH                   = 2,
     EVENT_SPELL_CONSUME                 = 3,
     EVENT_SPELL_CORPSE_EXPLODE          = 4,
-    EVENT_SPAWN_INVADERS                = 5,
-    EVENT_KILL_TALK                     = 6
+    EVENT_SPAWN_INVADERS                = 5
 };
 
 class boss_trollgore : public CreatureScript
@@ -101,11 +101,7 @@ public:
 
         void KilledUnit(Unit*  /*victim*/) override
         {
-            if (events.GetNextEventTime(EVENT_KILL_TALK) == 0)
-            {
-                Talk(SAY_KILL);
-                events.ScheduleEvent(EVENT_KILL_TALK, 6s);
-            }
+            Talk(SAY_KILL);
         }
 
         void JustSummoned(Creature* summon) override
@@ -129,11 +125,17 @@ public:
             if (!UpdateVictim())
                 return;
 
+            if (!CheckInRoom())
+            {
+                EnterEvadeMode(EVADE_REASON_BOUNDARY);
+                return;
+            }
+
             events.Update(diff);
             if (me->HasUnitState(UNIT_STATE_CASTING))
                 return;
 
-            switch(events.ExecuteEvent())
+            switch (events.ExecuteEvent())
             {
                 case EVENT_SPELL_INFECTED_WOUND:
                     me->CastSpell(me->GetVictim(), SPELL_INFECTED_WOUND, false);
@@ -158,9 +160,9 @@ public:
             DoMeleeAttackIfReady();
         }
 
-        bool CheckEvadeIfOutOfCombatArea() const override
+        bool CheckInRoom() override
         {
-            return me->GetHomePosition().GetExactDist2d(me) > 60.0f;
+            return (me->GetPositionY() >= -700.0f && me->GetPositionY() <= -628.0f);
         }
 
     private:
@@ -213,7 +215,7 @@ class spell_trollgore_corpse_explode_aura : public AuraScript
     void HandleRemove(AuraEffect const* /*aurEff*/, AuraEffectHandleModes /*mode*/)
     {
         if (Creature* target = GetTarget()->ToCreature())
-            target->DespawnOrUnsummon(1);
+            target->DespawnOrUnsummon(1ms);
     }
 
     void Register() override

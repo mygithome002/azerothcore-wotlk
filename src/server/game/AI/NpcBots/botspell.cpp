@@ -1,3 +1,4 @@
+#include "botdefine.h"
 #include "botspell.h"
 #include "DBCStores.h"
 #include "Log.h"
@@ -7,8 +8,8 @@
 
 #include <unordered_map>
 
-typedef std::unordered_map<uint32, SpellInfo> SpellInfoOverridesMap;
-typedef std::unordered_map<uint32, SpellProcEntry> SpellProcOverridesMap;
+using SpellInfoOverridesMap = std::unordered_map<uint32, SpellInfo>;
+using SpellProcOverridesMap = std::unordered_map<uint32, SpellProcEntry>;
 static SpellInfoOverridesMap botSpellInfoOverrides;
 static SpellProcOverridesMap botSpellProcOverrides;
 
@@ -927,7 +928,7 @@ void GenerateBotCustomSpells()
     sinfo->ExplicitTargetMask = TARGET_FLAG_UNIT;
     sinfo->Attributes |= SPELL_ATTR0_NO_ACTIVE_DEFENSE;
     sinfo->AttributesEx |= SPELL_ATTR1_NO_REDIRECTION | SPELL_ATTR1_NO_REFLECTION;
-    sinfo->AttributesEx3 |= SPELL_ATTR3_SUPRESS_TARGET_PROCS | SPELL_ATTR3_ALWAYS_HIT;
+    sinfo->AttributesEx3 |= SPELL_ATTR3_SUPPRESS_TARGET_PROCS | SPELL_ATTR3_ALWAYS_HIT;
     sinfo->AttributesEx4 |= SPELL_ATTR4_NO_CAST_LOG;
     sinfo->AttributesEx5 |= SPELL_ATTR5_EXTRA_INITIAL_PERIOD;
 
@@ -1536,7 +1537,7 @@ void GenerateBotCustomSpells()
     sinfo->Attributes |= SPELL_ATTR0_DO_NOT_DISPLAY | SPELL_ATTR0_IS_ABILITY;
     sinfo->AttributesEx |= SPELL_ATTR1_IS_SELF_CHANNELED | SPELL_ATTR1_TRACK_TARGET_IN_CHANNEL | SPELL_ATTR1_NO_THREAT;
     sinfo->AttributesEx2 |= SPELL_ATTR2_IGNORE_LINE_OF_SIGHT;
-    sinfo->AttributesEx3 |= SPELL_ATTR3_SUPRESS_TARGET_PROCS;
+    sinfo->AttributesEx3 |= SPELL_ATTR3_SUPPRESS_TARGET_PROCS;
 
     sinfo->Effects[0].Effect = SPELL_EFFECT_APPLY_AURA;
     sinfo->Effects[0].ApplyAuraName = SPELL_AURA_DUMMY;
@@ -1667,7 +1668,7 @@ void GenerateBotCustomSpells()
     sinfo->Attributes |= SPELL_ATTR0_IS_ABILITY | SPELL_ATTR0_DO_NOT_SHEATH | SPELL_ATTR0_ALLOW_CAST_WHILE_DEAD | SPELL_ATTR0_ALLOW_WHILE_SITTING;
     sinfo->AttributesEx |= SPELL_ATTR1_NO_REFLECTION | SPELL_ATTR1_NO_REDIRECTION | SPELL_ATTR1_NO_THREAT;
     sinfo->AttributesEx2 |= SPELL_ATTR2_IGNORE_LINE_OF_SIGHT;
-    sinfo->AttributesEx3 |= SPELL_ATTR3_ALWAYS_HIT | SPELL_ATTR3_SUPRESS_TARGET_PROCS;
+    sinfo->AttributesEx3 |= SPELL_ATTR3_ALWAYS_HIT | SPELL_ATTR3_SUPPRESS_TARGET_PROCS;
     sinfo->AttributesEx5 |= SPELL_ATTR5_ALLOW_WHILE_STUNNED;
     sinfo->AttributesEx6 |= SPELL_ATTR6_ALLOW_WHILE_RIDING_VEHICLE | SPELL_ATTR6_IGNORE_PHASE_SHIFT;
 
@@ -1761,7 +1762,7 @@ void GenerateBotCustomSpells()
     sinfo->ExplicitTargetMask = TARGET_FLAG_UNIT;
     sinfo->Attributes |= SPELL_ATTR0_DO_NOT_DISPLAY | SPELL_ATTR0_DO_NOT_LOG;
     sinfo->AttributesEx |= SPELL_ATTR1_IS_SELF_CHANNELED | SPELL_ATTR1_NO_AURA_ICON | SPELL_ATTR1_NO_THREAT;
-    sinfo->AttributesEx3 |= SPELL_ATTR3_SUPRESS_TARGET_PROCS;
+    sinfo->AttributesEx3 |= SPELL_ATTR3_SUPPRESS_TARGET_PROCS;
 
     sinfo->Effects[0].Effect = SPELL_EFFECT_APPLY_AURA;
     sinfo->Effects[0].ApplyAuraName = SPELL_AURA_DUMMY;
@@ -1796,7 +1797,17 @@ void GenerateBotCustomSpells()
     }
     //49) END LOCUST SWARM
 
-    //50) SOUL BITE
+    //50) TAUNT (CRYPT LORD)
+    spellId = SPELL_TAUNT_CRYPT_LORD; //54794
+    botSpellInfoOverrides.insert({ spellId, *sSpellMgr->GetSpellInfo(spellId) });
+    sinfo = &botSpellInfoOverrides.at(spellId);
+    sinfo->SpellLevel = 10;
+    sinfo->BaseLevel = 10;
+    sinfo->RangeEntry = sSpellRangeStore.LookupEntry(4); //30 yds
+    sinfo->AttributesEx &= ~SPELL_ATTR1_NO_AUTOCAST_AI;
+    //50) END TAUNT (CRYPT LORD)
+
+    //51) SOUL BITE
     spellId = SPELL_SOUL_BITE; //11016
     botSpellInfoOverrides.insert({ spellId, *sSpellMgr->GetSpellInfo(spellId) });
     sinfo = &botSpellInfoOverrides.at(spellId);
@@ -1872,9 +1883,9 @@ void GenerateBotCustomSpells()
     sinfo->Effects[2].DamageMultiplier = 0.0f;
     sinfo->Effects[2].ValueMultiplier = 0.0f;
     sinfo->Effects[2].BonusMultiplier = 0.0f;
-    //50) END SOUL BITE
+    //51) END SOUL BITE
 
-    //51) ENERGIZE VISUAL
+    //52) ENERGIZE VISUAL
     spellId = SPELL_ENERGIZE_VISUAL; //59198
     botSpellInfoOverrides.insert({ spellId, *sSpellMgr->GetSpellInfo(spellId) });
     sinfo = &botSpellInfoOverrides.at(spellId);
@@ -1886,7 +1897,7 @@ void GenerateBotCustomSpells()
     sinfo->Effects[0].Effect = SPELL_EFFECT_DUMMY;
     sinfo->Effects[0].BasePoints = 0;
     sinfo->Effects[0].DieSides = 0;
-    //51) END ENERGIZE VISUAL
+    //52) END ENERGIZE VISUAL
 
     //XX) FIXES
     spellId = 48155; // Mind Flay (Rank 8)
@@ -1902,7 +1913,7 @@ void GenerateBotCustomSpells()
         }
     }
 
-    LOG_INFO("server.loading", ">> Bot spellInfo overrides generated for {} spells", uint32(botSpellInfoOverrides.size()));
+    BOT_LOG_INFO("server.loading", ">> Bot spellInfo overrides generated for {} spells", uint32(botSpellInfoOverrides.size()));
 
     GenerateBotCustomSpellProcs();
 }

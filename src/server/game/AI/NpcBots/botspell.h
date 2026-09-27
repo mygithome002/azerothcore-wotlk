@@ -1,5 +1,5 @@
-#ifndef _BOTSPELL_H
-#define _BOTSPELL_H
+#ifndef BOTSPELL_H
+#define BOTSPELL_H
 
 #include "Define.h"
 
@@ -22,6 +22,16 @@ enum BotSpells : uint32
     WANDERER_HEARTHSTONE                = 54318,//"Hearthsone" no CD
     SUMMONING_STONE_EFFECT              = 59782,//Cast time 5s + Channeled 2m
     SHOOT_WAND                          = 5019,
+    OPEN_FLAG_BG                        = 21651,
+    ARENA_FLAG_TEAM_A_GOLD              = 32724,
+    ARENA_FLAG_TEAM_A_GREEN             = 32725,
+    ARENA_FLAG_TEAM_H_GOLD              = 35774,
+    ARENA_FLAG_TEAM_H_GREEN             = 35775,
+///Rank 1 spells used outside of class ai
+//MAGE
+    RITUAL_OF_REFRESHMENT_1             = 43987,
+//WARLOCK
+    RITUAL_OF_SOULS_1                   = 29893,
 ///Portals
     PORTAL_STORMWIND                    = 10059,
     PORTAL_IRONFORGE                    = 11416,
@@ -179,6 +189,7 @@ enum BotSpells : uint32
     SPELL_IMPALE_VISUAL                 = 59446,
     SPELL_CARRION_BEETLES               = 53520,
     SPELL_LOCUST_SWARM                  = 28785,
+    SPELL_TAUNT_CRYPT_LORD              = 54794,
     SPELL_SOUL_BITE                     = 11016, //special - pet
     SPELL_ENERGIZE_VISUAL               = 59198,
     SPELL_BURROW                        = 68394, //special - pet (NYI) //SPELL_EFFECT_FORCE_DESELECT
@@ -299,7 +310,7 @@ enum BotMountSpells : uint32
     BOT_MOUNT_FLY_HORDE_280_2           = 32295,
     BOT_MOUNT_FLY_HORDE_280_3           = 32296
 };
-constexpr std::size_t NUM_MOUNTS_PER_SPEED = 3;
+inline constexpr std::size_t NUM_MOUNTS_PER_SPEED = 3;
 
 enum BotItemUseSpellTargeting : uint8
 {
@@ -314,4 +325,4 @@ SpellInfo const* AssertBotSpellInfoOverride(uint32 spellId);
 SpellProcEntry const* GetBotSpellProceEntryOverride(uint32 spellId);
 void GenerateBotCustomSpells();
 
-#endif //_BOTSPELL_H
+#endif //BOTSPELL_H

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -42,7 +42,7 @@ enum GuildHook
 class GuildScript : public ScriptObject
 {
 protected:
-    GuildScript(const char* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
+    GuildScript(char const* name, std::vector<uint16> enabledHooks = std::vector<uint16>());
 
 public:
     [[nodiscard]] bool IsDatabaseBound() const override { return false; }
@@ -54,13 +54,13 @@ public:
     virtual void OnRemoveMember(Guild* /*guild*/, Player* /*player*/, bool /*isDisbanding*/, bool /*isKicked*/) { }
 
     // Called when the guild MOTD (message of the day) changes.
-    virtual void OnMOTDChanged(Guild* /*guild*/, const std::string& /*newMotd*/) { }
+    virtual void OnMOTDChanged(Guild* /*guild*/, std::string const& /*newMotd*/) { }
 
     // Called when the guild info is altered.
-    virtual void OnInfoChanged(Guild* /*guild*/, const std::string& /*newInfo*/) { }
+    virtual void OnInfoChanged(Guild* /*guild*/, std::string const& /*newInfo*/) { }
 
     // Called when a guild is created.
-    virtual void OnCreate(Guild* /*guild*/, Player* /*leader*/, const std::string& /*name*/) { }
+    virtual void OnCreate(Guild* /*guild*/, Player* /*leader*/, std::string const& /*name*/) { }
 
     // Called when a guild is disbanded.
     virtual void OnDisband(Guild* /*guild*/) { }

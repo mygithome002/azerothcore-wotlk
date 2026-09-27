@@ -12,6 +12,7 @@
 #    CRYPTOGRAPHY
 #    UPDATE SETTINGS
 #    LOGGING SYSTEM SETTINGS
+#    NETWORK
 #
 ###################################################################################################
 
@@ -176,8 +177,7 @@ SourceDirectory = ""
 #    MySQLExecutable
 #        Description: The path to your MySQL CLI binary.
 #                     If the path is left empty, built-in path from cmake is used.
-#        Example:     "C:/Program Files/MariaDB 10.5/bin/mysql.exe"
-#                     "C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe"
+#        Example:     "C:/Program Files/MySQL/MySQL Server 8.4/bin/mysql.exe"
 #                     "mysql.exe"
 #                     "/usr/bin/mysql"
 #        Default:     ""
@@ -266,14 +266,6 @@ LoginDatabase.SynchThreads = 1
 # CRYPTOGRAPHY
 
 #
-#    EnableTOTP
-#        Description: Check if a TOTP token is needed on account login
-#
-#        Default:     0 - (Disabled)
-#                     1 - (Enabled)
-
-EnableTOTP = 0
-
 #    TOTPMasterSecret
 #        Description: The master key used to encrypt TOTP secrets for database storage.
 #                     If you want to change this, uncomment TOTPOldMasterSecret, then copy
@@ -438,6 +430,23 @@ Appender.Auth=2,5,0,Auth.log,w
 #
 
 Logger.root=4,Console Auth
+
+#
+###################################################################################################
+
+###################################################################################################
+# NETWORK
+#
+#    Network.UseSocketActivation
+#        Description: [LINUX ONLY FEATURE] Enable systemd socket activation support for the authserver.
+#                     When enabled and the process is started by systemd socket activation,
+#                     the server will use the socket passed by systemd instead of
+#                     creating and binding its own listening socket. Disabled by default.
+#
+#        Example:     1 - (Enabled)
+#        Default:     0 - (Disabled)
+
+Network.UseSocketActivation = 0
 
 #
 ###################################################################################################

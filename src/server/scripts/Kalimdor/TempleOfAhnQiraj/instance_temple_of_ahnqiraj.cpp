@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -42,7 +42,8 @@ ObjectData const creatureData[] =
 DoorData const doorData[] =
 {
     { AQ40_DOOR_SKERAM,      DATA_SKERAM,        DOOR_TYPE_PASSAGE },
-    { AQ40_DOOR_TE_ENTRANCE, DATA_TWIN_EMPERORS, DOOR_TYPE_ROOM },
+    { AQ40_DOOR_TE_ENTRANCE, DATA_HUHURAN,       DOOR_TYPE_PASSAGE },
+    { AQ40_DOOR_TE_ENTRANCE, DATA_TWIN_EMPERORS, DOOR_TYPE_ROOM    },
     { AQ40_DOOR_TE_EXIT,     DATA_TWIN_EMPERORS, DOOR_TYPE_PASSAGE },
     { 0,                     0,                  DOOR_TYPE_ROOM}
 };
@@ -50,7 +51,7 @@ DoorData const doorData[] =
 class instance_temple_of_ahnqiraj : public InstanceMapScript
 {
 public:
-    instance_temple_of_ahnqiraj() : InstanceMapScript("instance_temple_of_ahnqiraj", 531) { }
+    instance_temple_of_ahnqiraj() : InstanceMapScript("instance_temple_of_ahnqiraj", MAP_AHN_QIRAJ_TEMPLE) { }
 
     InstanceScript* GetInstanceScript(InstanceMap* map) const override
     {
@@ -81,7 +82,7 @@ public:
                         creature->Respawn();
                     break;
                 case NPC_MASTERS_EYE:
-                    if (GetBossState(DATA_TWIN_EMPERORS) != DONE)
+                    if (GetBossState(DATA_TWIN_EMPERORS) != DONE && !creature->IsAlive())
                         creature->Respawn(true);
                     break;
                 case NPC_CTHUN:
@@ -187,6 +188,28 @@ public:
                 default:
                     break;
             }
+        }
+
+        bool CheckRequiredBosses(uint32 bossId, Player const* player) const override
+        {
+            if (_SkipCheckRequiredBosses(player))
+                return true;
+
+            switch (bossId)
+            {
+                case DATA_TWIN_EMPERORS:
+                    if (GetBossState(DATA_HUHURAN) != DONE)
+                        return false;
+                    break;
+                case DATA_CTHUN:
+                    if (GetBossState(DATA_TWIN_EMPERORS) != DONE)
+                        return false;
+                    break;
+                default:
+                    break;
+            }
+
+            return true;
         }
 
         bool SetBossState(uint32 type, EncounterState state) override

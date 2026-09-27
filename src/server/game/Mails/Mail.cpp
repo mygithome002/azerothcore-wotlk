@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -24,10 +24,11 @@
 #include "GameTime.h"
 #include "Item.h"
 #include "Log.h"
+#include "MailMgr.h"
+#include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "ScriptMgr.h"
-#include "Unit.h"
 #include "World.h"
 
 MailSender::MailSender(Object* sender, MailStationery stationery) : m_stationery(stationery)
@@ -64,7 +65,7 @@ MailSender::MailSender(CalendarEvent* sender)
 }
 
 MailSender::MailSender(AuctionEntry* sender)
-    : m_messageType(MAIL_AUCTION), m_senderId(sender->GetHouseId()), m_stationery(MAIL_STATIONERY_AUCTION)
+    : m_messageType(MAIL_AUCTION), m_senderId(uint32(sender->GetHouseId())), m_stationery(MAIL_STATIONERY_AUCTION)
 {
 }
 
@@ -198,6 +199,12 @@ void MailDraft::SendMailTo(CharacterDatabaseTransaction trans, MailReceiver cons
     if (pReceiver)
         prepareItems(pReceiver, trans);                            // generate mail template items
 
+    // Callers that only know the receiver's guid must still reach an online receiver's in-memory
+    // mailbox, otherwise the mail is written to the database only and stays invisible (and
+    // unannounced) until that character relogs
+    if (!pReceiver)
+        pReceiver = ObjectAccessor::FindConnectedPlayer(ObjectGuid::Create<HighGuid::Player>(receiver.GetPlayerGUIDLow()));
+
     uint32 mailId = sObjectMgr->GenerateMailID();
 
     time_t deliver_time = GameTime::GetGameTime().count() + deliver_delay;
@@ -252,13 +259,11 @@ void MailDraft::SendMailTo(CharacterDatabaseTransaction trans, MailReceiver cons
         trans->Append(stmt);
     }
 
-    sCharacterCache->IncreaseCharacterMailCount(ObjectGuid(HighGuid::Player, receiver.GetPlayerGUIDLow()));
+    sMailMgr->OnMailSent(receiver.GetPlayerGUIDLow());
 
     // For online receiver update in game mail status and data
     if (pReceiver)
     {
-        pReceiver->AddNewMailDeliverTime(deliver_time);
-
         Mail* m = new Mail;
         m->messageID = mailId;
         m->mailTemplateId = GetMailTemplateId();
@@ -290,7 +295,15 @@ void MailDraft::SendMailTo(CharacterDatabaseTransaction trans, MailReceiver cons
             {
                 pReceiver->AddMItem(mailItemIter->second);
             }
+
+            // The receiver owns the items now, so drop them from the draft without deleting them.
+            // The offline path below does the same through deleteIncludedItems, and a draft reused
+            // for another receiver must not attach them a second time
+            m_items.clear();
         }
+
+        // Announce last: the notification may push the inbox, which has to contain this mail already
+        pReceiver->AddNewMailDeliverTime(deliver_time);
     }
     else if (!m_items.empty())
     {

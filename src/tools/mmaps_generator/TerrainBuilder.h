@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -18,7 +18,6 @@
 #ifndef _MMAP_TERRAIN_BUILDER_H
 #define _MMAP_TERRAIN_BUILDER_H
 
-#include "PathCommon.h"
 #include "WorldModel.h"
 
 #include "G3D/Array.h"
@@ -77,14 +76,14 @@ namespace MMAP
     class TerrainBuilder
     {
     public:
-        TerrainBuilder(bool skipLiquid);
+        TerrainBuilder(std::string const& mapsPath, bool skipLiquid);
         ~TerrainBuilder();
 
-        TerrainBuilder(const TerrainBuilder& tb) = delete;
+        TerrainBuilder(TerrainBuilder const& tb) = delete;
 
         void loadMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData);
         bool loadVMap(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData);
-        void loadOffMeshConnections(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData, const char* offMeshFilePath);
+        void loadOffMeshConnections(uint32 mapID, uint32 tileX, uint32 tileY, MeshData& meshData, std::vector<std::string> const& offMeshLines);
 
         [[nodiscard]] bool usesLiquids() const { return !m_skipLiquid; }
 
@@ -122,6 +121,9 @@ namespace MMAP
 
         /// Get the liquid type for a specific position
         uint8 getLiquidType(int square, const uint8 liquid_type[16][16]);
+
+        std::string m_mapsPath;
+        std::string m_vmapsPath;
     };
 }
 

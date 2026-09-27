@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -21,16 +21,13 @@
 #include "DynamicObject.h"
 #include "GameObject.h"
 #include "GridNotifiers.h"
-#include "Log.h"
 #include "Map.h"
 #include "MapMgr.h"
 #include "ObjectDefines.h"
 #include "ObjectMgr.h"
-#include "Opcodes.h"
 #include "Pet.h"
 #include "Player.h"
 #include "Transport.h"
-#include "Vehicle.h"
 
 template<class T>
 void HashMapHolder<T>::Insert(T* o)
@@ -61,18 +58,42 @@ T* HashMapHolder<T>::Find(ObjectGuid guid)
     return (itr != GetContainer().end()) ? itr->second : nullptr;
 }
 
+// Both statics are intentionally never destroyed.
+//
+// As plain function-local statics they are destroyed during exit, in reverse
+// order of construction. Other global destructors still reach into them after
+// that point, and locking a destroyed std::shared_mutex is undefined
+// behaviour. Observed as ACCESS_VIOLATION (0xC0000005) on a normal graceful
+// shutdown, via:
+//
+//     exit -> GuildMgr::~GuildMgr -> Guild::~Guild -> Guild::_DeleteBankItems
+//          -> Guild::BankTab::Delete -> Object::ClearUpdateMask
+//          -> Item::RemoveFromObjectUpdate -> Item::GetOwner
+//          -> ObjectAccessor::FindPlayer -> HashMapHolder<Player>::Find
+//
+// GuildMgr tears down guild bank items and asks each item for its owning
+// player, after the player map and its lock have already gone.
+//
+// Leaking makes them outlive every other static, so a late lookup finds an
+// empty but valid map and returns nullptr rather than crashing. The memory is
+// reclaimed by the OS at process exit, so nothing is lost.
+//
+// This makes late lookups safe; it does not prevent them. Removing them would
+// mean destroying guilds inside World::Shutdown while the player map is still
+// alive, which is a much larger change to shutdown sequencing.
+
 template<class T>
 auto HashMapHolder<T>::GetContainer() -> MapType&
 {
-    static MapType _objectMap;
-    return _objectMap;
+    static MapType* _objectMap = new MapType();
+    return *_objectMap;
 }
 
 template<class T>
 std::shared_mutex* HashMapHolder<T>::GetLock()
 {
-    static std::shared_mutex _lock;
-    return &_lock;
+    static std::shared_mutex* _lock = new std::shared_mutex();
+    return _lock;
 }
 
 HashMapHolder<Player>::MapType const& ObjectAccessor::GetPlayers()
@@ -115,7 +136,7 @@ namespace PlayerNameMapHolder
 
 } // namespace PlayerNameMapHolder
 
-WorldObject* ObjectAccessor::GetWorldObject(WorldObject const& p, ObjectGuid const guid)
+WorldObject* ObjectAccessor::GetWorldObject(WorldObject const& p, ObjectGuid const& guid)
 {
     switch (guid.GetHigh())
     {
@@ -141,7 +162,7 @@ WorldObject* ObjectAccessor::GetWorldObject(WorldObject const& p, ObjectGuid con
     return nullptr;
 }
 
-Object* ObjectAccessor::GetObjectByTypeMask(WorldObject const& p, ObjectGuid const guid, uint32 typemask)
+Object* ObjectAccessor::GetObjectByTypeMask(WorldObject const& p, ObjectGuid const& guid, uint32 typemask)
 {
     switch (guid.GetHigh())
     {
@@ -179,27 +200,27 @@ Object* ObjectAccessor::GetObjectByTypeMask(WorldObject const& p, ObjectGuid con
     return nullptr;
 }
 
-Corpse* ObjectAccessor::GetCorpse(WorldObject const& u, ObjectGuid const guid)
+Corpse* ObjectAccessor::GetCorpse(WorldObject const& u, ObjectGuid const& guid)
 {
     return u.GetMap()->GetCorpse(guid);
 }
 
-GameObject* ObjectAccessor::GetGameObject(WorldObject const& u, ObjectGuid const guid)
+GameObject* ObjectAccessor::GetGameObject(WorldObject const& u, ObjectGuid const& guid)
 {
     return u.GetMap()->GetGameObject(guid);
 }
 
-Transport* ObjectAccessor::GetTransport(WorldObject const& u, ObjectGuid const guid)
+Transport* ObjectAccessor::GetTransport(WorldObject const& u, ObjectGuid const& guid)
 {
     return u.GetMap()->GetTransport(guid);
 }
 
-DynamicObject* ObjectAccessor::GetDynamicObject(WorldObject const& u, ObjectGuid const guid)
+DynamicObject* ObjectAccessor::GetDynamicObject(WorldObject const& u, ObjectGuid const& guid)
 {
     return u.GetMap()->GetDynamicObject(guid);
 }
 
-Unit* ObjectAccessor::GetUnit(WorldObject const& u, ObjectGuid const guid)
+Unit* ObjectAccessor::GetUnit(WorldObject const& u, ObjectGuid const& guid)
 {
     if (guid.IsPlayer())
         return GetPlayer(u, guid);
@@ -210,17 +231,17 @@ Unit* ObjectAccessor::GetUnit(WorldObject const& u, ObjectGuid const guid)
     return GetCreature(u, guid);
 }
 
-Creature* ObjectAccessor::GetCreature(WorldObject const& u, ObjectGuid const guid)
+Creature* ObjectAccessor::GetCreature(WorldObject const& u, ObjectGuid const& guid)
 {
     return u.GetMap()->GetCreature(guid);
 }
 
-Pet* ObjectAccessor::GetPet(WorldObject const& u, ObjectGuid const guid)
+Pet* ObjectAccessor::GetPet(WorldObject const& u, ObjectGuid const& guid)
 {
     return u.GetMap()->GetPet(guid);
 }
 
-Player* ObjectAccessor::GetPlayer(Map const* m, ObjectGuid const guid)
+Player* ObjectAccessor::GetPlayer(Map const* m, ObjectGuid const& guid)
 {
     if (Player * player = HashMapHolder<Player>::Find(guid))
         if (player->IsInWorld() && player->GetMap() == m)
@@ -229,12 +250,12 @@ Player* ObjectAccessor::GetPlayer(Map const* m, ObjectGuid const guid)
     return nullptr;
 }
 
-Player* ObjectAccessor::GetPlayer(WorldObject const& u, ObjectGuid const guid)
+Player* ObjectAccessor::GetPlayer(WorldObject const& u, ObjectGuid const& guid)
 {
     return GetPlayer(u.GetMap(), guid);
 }
 
-Creature* ObjectAccessor::GetCreatureOrPetOrVehicle(WorldObject const& u, ObjectGuid const guid)
+Creature* ObjectAccessor::GetCreatureOrPetOrVehicle(WorldObject const& u, ObjectGuid const& guid)
 {
     if (guid.IsPet())
         return GetPet(u, guid);

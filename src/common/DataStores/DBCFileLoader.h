@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -41,7 +41,7 @@ public:
     DBCFileLoader();
     ~DBCFileLoader();
 
-    bool Load(const char* filename, const char* fmt);
+    bool Load(char const* filename, char const* fmt);
 
     class Record
     {
@@ -68,7 +68,7 @@ public:
             return *reinterpret_cast<uint8*>(offset + file.GetOffset(field));
         }
 
-        [[nodiscard]] const char* getString(std::size_t field) const
+        [[nodiscard]] char const* getString(std::size_t field) const
         {
             ASSERT(field < file.fieldCount);
             std::size_t stringOffset = getUInt(field);
@@ -94,7 +94,7 @@ public:
     [[nodiscard]] bool IsLoaded() const { return data != nullptr; }
     char* AutoProduceData(char const* fmt, uint32& count, char**& indexTable);
     char* AutoProduceStrings(char const* fmt, char* dataTable);
-    static uint32 GetFormatRecordSize(const char* format, int32* index_pos = nullptr);
+    static uint32 GetFormatRecordSize(char const* format, int32* index_pos = nullptr);
 
 private:
     uint32 recordSize;

@@ -1,14 +1,14 @@
 /*
  * This file is part of the AzerothCore Project. See AUTHORS file for Copyright information
  *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Affero General Public License as published by the
- * Free Software Foundation; either version 3 of the License, or (at your
- * option) any later version.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for
+ * FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
  * more details.
  *
  * You should have received a copy of the GNU General Public License along
@@ -28,6 +28,7 @@ enum Spells
     SPELL_SLEEP               = 31298,
     SPELL_INFERNO             = 31299,
     SPELL_VAMPIRIC_AURA       = 31317,
+    SPELL_VAMPIRIC_AURA_HEAL  = 31285,
     SPELL_ENRAGE              = 26662,
     SPELL_INFERNAL_STUN       = 31302,
     SPELL_INFERNAL_IMMOLATION = 31304
@@ -46,14 +47,7 @@ enum Texts
 struct boss_anetheron : public BossAI
 {
 public:
-    boss_anetheron(Creature* creature) : BossAI(creature, DATA_ANETHERON)
-    {
-        _recentlySpoken = false;
-        scheduler.SetValidator([this]
-            {
-                return !me->HasUnitState(UNIT_STATE_CASTING);
-            });
-    }
+    boss_anetheron(Creature* creature) : BossAI(creature, DATA_ANETHERON) { }
 
     void JustEngagedWith(Unit * who) override
     {
@@ -67,7 +61,7 @@ public:
         }).Schedule(25s, 32s, [this](TaskContext context)
         {
             Talk(SAY_SLEEP);
-            DoCastRandomTarget(SPELL_SLEEP, 1, 0.0f, true, false, false);
+            DoCastRandomTarget(SPELL_SLEEP, 0, 0.0f, true, false, false);
             context.Repeat(35s, 48s);
         }).Schedule(30s, 48s, [this](TaskContext context)
         {
@@ -97,7 +91,7 @@ public:
         Talk(SAY_ONSPAWN, 1200ms);
 
         if (action == DATA_ANETHERON)
-            me->GetMotionMaster()->MovePath(urand(ALLIANCE_BASE_CHARGE_1, ALLIANCE_BASE_CHARGE_3), false);
+            me->GetMotionMaster()->MoveWaypoint(urand(ALLIANCE_BASE_CHARGE_1, ALLIANCE_BASE_CHARGE_3), false);
     }
 
     void PathEndReached(uint32 pathId) override
@@ -109,7 +103,7 @@ public:
         case ALLIANCE_BASE_CHARGE_3:
             me->m_Events.AddEventAtOffset([this]()
                 {
-                    me->GetMotionMaster()->MovePath(urand(ALLIANCE_BASE_PATROL_1, ALLIANCE_BASE_PATROL_3), true);
+                    me->GetMotionMaster()->MoveWaypoint(urand(ALLIANCE_BASE_PATROL_1, ALLIANCE_BASE_PATROL_3), true);
                 }, 1s);
             break;
         }
@@ -117,16 +111,8 @@ public:
 
     void KilledUnit(Unit* victim) override
     {
-        if (!_recentlySpoken && victim->IsPlayer())
-        {
-            Talk(SAY_ONSLAY);
-            _recentlySpoken = true;
-
-            scheduler.Schedule(6s, [this](TaskContext)
-                {
-                    _recentlySpoken = false;
-                });
-        }
+        if (me->IsAlive())
+            Talk(SAY_ONSLAY, victim);
     }
 
     void JustDied(Unit * killer) override
@@ -135,8 +121,6 @@ public:
         BossAI::JustDied(killer);
     }
 
-private:
-    bool _recentlySpoken;
 };
 
 class spell_anetheron_sleep : public SpellScript
@@ -160,8 +144,37 @@ class spell_anetheron_sleep : public SpellScript
     }
 };
 
+// 31317 - Vampiric Aura
+class spell_anetheron_vampiric_aura : public AuraScript
+{
+    PrepareAuraScript(spell_anetheron_vampiric_aura);
+
+    bool Validate(SpellInfo const* /*spellInfo*/) override
+    {
+        return ValidateSpellInfo({ SPELL_VAMPIRIC_AURA_HEAL });
+    }
+
+    void HandleProc(AuraEffect const* aurEff, ProcEventInfo& eventInfo)
+    {
+        PreventDefaultAction();
+        DamageInfo* damageInfo = eventInfo.GetDamageInfo();
+        if (!damageInfo || !damageInfo->GetDamage())
+            return;
+
+        Unit* actor = eventInfo.GetActor();
+        int32 bp = damageInfo->GetDamage() * 3;
+        actor->CastCustomSpell(SPELL_VAMPIRIC_AURA_HEAL, SPELLVALUE_BASE_POINT0, bp, actor, true, nullptr, aurEff);
+    }
+
+    void Register() override
+    {
+        OnEffectProc += AuraEffectProcFn(spell_anetheron_vampiric_aura::HandleProc, EFFECT_0, SPELL_AURA_DUMMY);
+    }
+};
+
 void AddSC_boss_anetheron()
 {
     RegisterHyjalAI(boss_anetheron);
     RegisterSpellScript(spell_anetheron_sleep);
+    RegisterSpellScript(spell_anetheron_vampiric_aura);
 }
